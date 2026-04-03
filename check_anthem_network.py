@@ -76,12 +76,9 @@ def get_access_token(client: httpx.Client) -> str:
     """Obtain OAuth2 access token via client credentials grant."""
     resp = client.post(
         ANTHEM_TOKEN_URL,
-        data={
-            "grant_type": "client_credentials",
-            "client_id": ANTHEM_CLIENT_ID,
-            "client_secret": ANTHEM_CLIENT_SECRET,
-        },
+        data={"grant_type": "client_credentials"},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
+        auth=(ANTHEM_CLIENT_ID, ANTHEM_CLIENT_SECRET),
     )
     resp.raise_for_status()
     token_data = resp.json()
@@ -230,18 +227,64 @@ def main():
                 roles = get_practitioner_roles(client, token, practitioner_id)
 
                 network_names = []
+                network_org_ids = []
                 role_specialties = []
                 role_locations = []
+                accepting_patients = False
                 for role in roles:
+                    # Standard network field (usually empty in this API)
                     for net in role.get("network", []):
                         ref = net.get("display") or net.get("reference", "")
                         if ref and ref not in network_names:
                             network_names.append(ref)
+
+                    # DaVinci extensions — where Anthem actually puts network data
+                    for ext in role.get("extension", []):
+                        ext_url = ext.get("url", "")
+
+                        # network-reference extension
+                        if "network-reference" in ext_url:
+                            val = ext.get("valueReference", {})
+                            name = val.get("display", "")
+                            org_id = val.get("reference", "")
+                            if name and name not in network_names:
+                                network_names.append(name)
+                            if org_id and org_id not in network_org_ids:
+                                network_org_ids.append(org_id)
+
+                        # newpatients extension (nested)
+                        if "newpatients" in ext_url:
+                            for sub in ext.get("extension", []):
+                                if sub.get("url") == "acceptingPatients":
+                                    code = (sub.get("valueCodeableConcept", {})
+                                            .get("coding", [{}])[0]
+                                            .get("code", ""))
+                                    if code == "newpt":
+                                        accepting_patients = True
+                                if sub.get("url") == "fromNetwork":
+                                    val = sub.get("valueReference", {})
+                                    name = val.get("display", "")
+                                    if name and name not in network_names:
+                                        network_names.append(name)
+
+                        # qualification extension — specialties
+                        if "qualification" in ext_url:
+                            for sub in ext.get("extension", []):
+                                if sub.get("url") == "code":
+                                    for coding in (sub.get("valueCodeableConcept", {})
+                                                   .get("coding", [])):
+                                        desc = coding.get("display", "")
+                                        if desc and desc not in role_specialties:
+                                            role_specialties.append(desc)
+
+                    # Standard specialty field
                     for spec in role.get("specialty", []):
                         for coding in spec.get("coding", []):
                             desc = coding.get("display", "")
                             if desc and desc not in role_specialties:
                                 role_specialties.append(desc)
+
+                    # Locations
                     for loc in role.get("location", []):
                         ref = loc.get("display") or loc.get("reference", "")
                         if ref and ref not in role_locations:
@@ -251,8 +294,10 @@ def main():
                     **phys,
                     "anthem_practitioner_id": practitioner_id,
                     "anthem_networks": network_names,
+                    "anthem_network_org_ids": network_org_ids,
                     "anthem_specialties": role_specialties,
                     "anthem_locations": role_locations,
+                    "accepting_new_patients": accepting_patients,
                     "in_directory": True,
                 }
                 in_network.append(record)
@@ -285,6 +330,7 @@ def main():
         "last_name", "fore_name", "article_count", "npi", "credential",
         "specialty", "practice_city", "practice_state", "practice_address",
         "anthem_networks", "anthem_specialties", "anthem_locations",
+        "accepting_new_patients",
     ]
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
@@ -303,12 +349,40 @@ def main():
     print(f"\n=== In-Network Physicians ({len(in_network)}) ===")
     for p in sorted(in_network, key=lambda x: -x["article_count"]):
         nets = ", ".join(p.get("anthem_networks", [])) or "network info unavailable"
+        accepting = "accepting new patients" if p.get("accepting_new_patients") else "not confirmed accepting"
         print(
             f"  {p['fore_name']} {p['last_name']}, {p.get('credential') or '?'} "
             f"— {p.get('specialty', '?')} — {p['practice_city']}, IL "
-            f"— {p['article_count']} pub(s) — {nets}"
+            f"— {p['article_count']} pub(s) — {nets} — {accepting}"
         )
 
 
+def probe(resource: str, params: dict | None = None):
+    """Diagnostic: fetch a FHIR resource and dump the raw JSON."""
+    load_dotenv()
+    with httpx.Client(timeout=30.0) as client:
+        token = get_access_token(client)
+        resp = client.get(
+            f"{FHIR_BASE}/{resource}",
+            params=params or {},
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/fhir+json",
+            },
+        )
+        print(f"GET {resource} — {resp.status_code}")
+        print(json.dumps(resp.json(), indent=2)[:5000])
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--probe":
+        # Usage: uv run check_anthem_network.py --probe PractitionerRole practitioner=<id>
+        resource = sys.argv[2] if len(sys.argv) > 2 else "PractitionerRole"
+        params = {}
+        for arg in sys.argv[3:]:
+            if "=" in arg:
+                k, v = arg.split("=", 1)
+                params[k] = v
+        probe(resource, params)
+    else:
+        main()
