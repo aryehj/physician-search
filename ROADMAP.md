@@ -8,36 +8,27 @@ Search PubMed for piriformis-related publications across 11 query terms. Extract
 ### 2. NPI lookup
 Query the NPPES registry for US-based authors. Match against relevant specialty taxonomy codes (PM&R, pain medicine, neurology, orthopedic surgery, neurosurgery, anesthesiology/pain). Output: `data/physicians.csv`, `data/physicians.json` — 1,904 records, 306 with relevant specialties.
 
+### 3. Anthem in-network check (Cook County, IL)
+Filter physicians to Cook County, IL (29 with NPIs), then query Anthem's FHIR Provider Directory to check in-network status. 10 of 29 found in directory, all accepting new patients. Network affiliations extracted from DaVinci Plan-Net extensions on PractitionerRole resources.
+
+**API notes:**
+- Endpoint: `totalview.healthos.elevancehealth.com/resources/unregistered/api/v1/fhir/cms_mandate/mcd` (CMS-mandated, labeled Medicaid but returns commercial network data too)
+- Auth: OAuth2 client credentials with Basic auth header (not form body)
+- Practitioner search by `family`/`given` only (no `identifier`/NPI search) — must match NPI from returned results
+- Network data lives in DaVinci extensions (`network-reference`, `newpatients`), not the standard FHIR `network` field
+- Common network names seen: "Blue Choice Options PPO", "Participating Provider Option", "Blue Preferred PPO", "IL Blue Choice Select", "BCBS of Illinois PAR providers"
+
 ## In Progress
 
-### 3. Manual spot-check against Anthem BCBS
-Search a handful of high-signal physician names on [findcare.anthem.com](https://findcare.anthem.com) to validate:
-- Are published piriformis authors actually findable in the Anthem directory?
-- Does searching by NPI work, or only by name/location?
-- What plan-specific information is needed to get accurate in-network results?
-- How much noise is there (e.g., same-name mismatches)?
-
-This step informs how to approach automation.
-
-## Next Decision
-
-### 4. Automated insurance cross-reference via Anthem FHIR API
-
-**API details (researched 2026-04-03):**
-
-Anthem exposes a CMS-mandated Provider Directory API (FHIR R4, DaVinci PDEX Plan Net IG 1.1.0) at `totalview.healthos.elevancehealth.com`. Key resources: Practitioner, PractitionerRole (specialty, network, location refs), Organization, Location, InsurancePlan. Supports `_include` for efficient joined queries.
-
-- **Registration:** Free at `anthem.com/developers/provider-directory-api-request` — application submitted, pending approval. OAuth 2.0 client credentials flow.
-- **Sandbox:** `sbx.totalview.healthos.elevancehealth.com/registration/sandbox/login` — may be accessible before production credentials arrive.
-- **Brand endpoints:** Each plan (Anthem BCBS, Anthem Blue Cross CA, Wellpoint, UniCare, etc.) has its own slug under `/resources/registered/{Brand}/api/v1/fhir`.
-- **Key query:** `PractitionerRole?specialty={NUCC_code}&_include=PractitionerRole:practitioner,PractitionerRole:location` — returns in-network providers with name, NPI, address in one call.
-- **Unregistered (public) endpoints** exist for Medicaid (`/resources/unregistered/api/v1/fhir/cms_mandate/mcd/`) — metadata works but data queries currently return 500.
-
-**Plan:** Once credentials arrive, write a third pipeline script to cross-reference our 306 specialty-matched NPIs against Anthem's in-network directory for the patient's specific plan.
+### 4. Identify specific network for ESI PPO plan
+The API returns multiple network names per physician. Need to determine which network name corresponds to the user's specific ESI PPO plan to filter results more precisely. This may require checking insurance card/benefits portal or querying InsurancePlan resources.
 
 ## Open Problems
 
-### 5. Expanding beyond published authors
+### 5. Improve match quality
+Some results may be name collisions (e.g., Campbell with mostly out-of-state networks). Could improve by cross-referencing Anthem practice locations against NPPES practice addresses, or by filtering to physicians whose Anthem network list includes IL-specific networks.
+
+### 6. Expanding beyond published authors
 The PubMed pipeline finds people who *write about* piriformis syndrome. But a competent treating physician may never publish a paper — they may instead:
 
 - Practice alongside a published expert and absorb that expertise through daily collaboration

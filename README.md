@@ -10,20 +10,39 @@ Two-stage pipeline that identifies physicians with demonstrated familiarity with
 
 **Stage 2 — `lookup_npis.py`**: Queries the NPPES (National Provider Identifier) registry to find NPI numbers, credentials, specialties, and practice locations for each author. Filters to relevant specialties (PM&R, pain medicine, neurology, orthopedic surgery, neurosurgery, anesthesiology/pain).
 
+**Stage 3 — `check_anthem_network.py`**: Filters physicians to Cook County, IL, then checks each against the Anthem/Elevance Health FHIR Provider Directory API to determine in-network status. Extracts network affiliations, accepting-new-patients status, and Anthem-side specialty data from DaVinci Plan-Net extensions.
+
 Outputs land in `data/`:
 - `articles.json` — full article metadata (702 articles)
 - `authors.json` — deduplicated author list (2,647 authors)
 - `physicians.csv` / `physicians.json` — authors enriched with NPI and practice info (1,904 records, 306 with relevant specialties)
+- `in_network_physicians.csv` / `in_network_physicians.json` — Cook County physicians found in Anthem's provider directory
 
 ## Usage
 
 Requires [uv](https://docs.astral.sh/uv/). No project setup needed — scripts use inline dependency metadata.
 
 ```bash
-uv run fetch_authors.py        # Stage 1: ~2 min, hits PubMed API
-uv run lookup_npis.py          # Stage 2: ~5 min, hits NPPES API
-uv run lookup_npis.py --all    # Include international authors (slower)
+uv run fetch_authors.py            # Stage 1: ~2 min, hits PubMed API
+uv run lookup_npis.py              # Stage 2: ~5 min, hits NPPES API
+uv run lookup_npis.py --all        # Include international authors (slower)
+uv run check_anthem_network.py     # Stage 3: ~1 min, hits Anthem FHIR API
 ```
+
+Stage 3 requires a `.env` file with Anthem API credentials (see below).
+
+### Anthem API credentials
+
+Register at Anthem's developer portal to obtain credentials, then create a `.env` file in the project root:
+
+```
+ANTHEM_CLIENT_ID=...
+ANTHEM_CLIENT_SECRET=...
+ANTHEM_ACCESS_TOKEN_URL=...
+ANTHEM_PROVIDER_DIRECTORY_URL=...
+```
+
+The `.env` file is gitignored and never committed.
 
 ## Next steps
 
