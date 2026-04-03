@@ -18,6 +18,11 @@ Find physicians who share a practice location with known published piriformis ex
 
 Partially addresses the gap noted in Open Problem 6: physicians who work alongside publishing experts but don't publish themselves are now discoverable.
 
+### 6. Merge & rank across pipelines
+Joins all three pipeline outputs (publications, procedure volume, practice colleagues) plus Anthem in-network data via NPI-keyed full outer join. Computes a composite priority score weighting piriformis injection volume (27096 code), publication count, in-network status, specialty relevance, and colleague proximity. Outputs a ranked call list. Supports `--state`, `--city`, `--min-score`, `--top`, `--in-network-only`, `--exclude-zip-only` flags. Output: `data/ranked_physicians.json`, `data/ranked_physicians.csv`.
+
+Datasets are surprisingly disjoint: zero NPI overlap between Pipeline A (published authors) and B/C (procedure volume / practice colleagues). 46 NPIs overlap between B and C. Total: 3,892 unique NPIs across all three pipelines.
+
 ### 3. Anthem in-network check (Cook County, IL)
 Filter physicians to Cook County, IL (29 with NPIs), then query Anthem's FHIR Provider Directory to check in-network status. 10 of 29 found in directory, all accepting new patients. Network affiliations extracted from DaVinci Plan-Net extensions on PractitionerRole resources.
 
