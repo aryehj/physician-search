@@ -8,6 +8,11 @@ Search PubMed for piriformis-related publications across 11 query terms. Extract
 ### 2. NPI lookup
 Query the NPPES registry for US-based authors. Match against relevant specialty taxonomy codes (PM&R, pain medicine, neurology, orthopedic surgery, neurosurgery, anesthesiology/pain). Output: `data/physicians.csv`, `data/physicians.json` — 1,904 records, 306 with relevant specialties.
 
+### 4. Procedure-volume pipeline (CMS Medicare data)
+Find physicians who *perform* piriformis-relevant procedures at high volume, independent of publication history. Auto-discovers and downloads CMS Medicare Provider Utilization and Payment Data, scans ~10M rows, filters to relevant HCPCS codes (27096 piriformis/sacroiliac injection weighted 10x; trigger point, nerve conduction, fluoroscopic guidance codes weighted 1-2x), ranks by weighted score. Optionally filters by state/city. Enriches via NPPES. Cross-references against Pipeline A published authors (`also_published` flag). Output: `data/procedure_physicians.json`, `data/procedure_physicians.csv`.
+
+This addresses the core limitation of Pipeline A: competent treating physicians who never publish are now discoverable.
+
 ### 3. Anthem in-network check (Cook County, IL)
 Filter physicians to Cook County, IL (29 with NPIs), then query Anthem's FHIR Provider Directory to check in-network status. 10 of 29 found in directory, all accepting new patients. Network affiliations extracted from DaVinci Plan-Net extensions on PractitionerRole resources.
 
@@ -28,13 +33,5 @@ The API returns multiple network names per physician. Need to determine which ne
 ### 5. Improve match quality
 Some results may be name collisions (e.g., Campbell with mostly out-of-state networks). Could improve by cross-referencing Anthem practice locations against NPPES practice addresses, or by filtering to physicians whose Anthem network list includes IL-specific networks.
 
-### 6. Expanding beyond published authors
-The PubMed pipeline finds people who *write about* piriformis syndrome. But a competent treating physician may never publish a paper — they may instead:
-
-- Practice alongside a published expert and absorb that expertise through daily collaboration
-- Have trained under or completed a fellowship with a known piriformis/deep-gluteal specialist
-- Work in a department or practice group that has a published track record, even if they personally haven't authored papers
-
-These practitioners are invisible to a publication search but may be exactly the right physician to see. The signal is indirect: shared practice addresses, overlapping institutional affiliations, residency/fellowship program connections, or referral network proximity to known experts.
-
-This is a harder data problem. Possible inputs include practice group rosters (from NPI practice addresses or hospital "find a doctor" pages), residency program alumni lists, and co-billing patterns in claims data. We don't yet have a solution — just the recognition that publication authorship is a useful but incomplete proxy for clinical competence in a specific condition.
+### 6. Expand coverage beyond published authors
+~~Addressed by Stage 4 (procedure-volume pipeline).~~ CMS claims data finds high-volume practitioners who never publish. Remaining gaps: physicians who perform procedures but bill under a group NPI, or whose volume falls below Medicare reporting thresholds (typically <11 services/year). Practice group rosters and hospital "find a doctor" pages could fill this further.
