@@ -8,7 +8,7 @@ Physician Search — a tool to help patients find appropriate in-network physici
 
 ## Status
 
-Two-stage pipeline is functional. See [ROADMAP.md](ROADMAP.md) for what's done, what's next, and open problems.
+Two-stage pipeline is functional. See [plans/ROADMAP.md](plans/ROADMAP.md) for what's done, what's next, and open problems. See `plans/` for implementation plans for upcoming work.
 
 ## Architecture
 
