@@ -399,16 +399,17 @@ def query_nppes(client: httpx.Client, npi: str) -> dict | None:
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Find physicians by procedure volume")
-    parser.add_argument("--min-score", type=float, default=10.0, help="Minimum weighted score (default: 10)")
-    parser.add_argument("--state", help="Filter to providers in this state (e.g., IL)")
-    parser.add_argument("--city", help="Filter to providers in this city (e.g., Chicago)")
-    parser.add_argument("--url", help="Manual override: direct CSV download URL for CMS file")
-    parser.add_argument("--top", type=int, default=500, help="Max providers to enrich via NPPES (default: 500)")
-    args = parser.parse_args()
-
+def run(
+    state: str | None = None,
+    city: str | None = None,
+    published_npis: set[str] | None = None,
+    min_score: float = 10.0,
+    top: int = 500,
+    url: str | None = None,
+) -> list[dict]:
+    """Find physicians by CMS procedure volume. Returns enriched list."""
     DATA_DIR.mkdir(exist_ok=True)
+    CMS_DIR.mkdir(parents=True, exist_ok=True)
 
     with httpx.Client(
         timeout=30.0,
@@ -417,8 +418,8 @@ def main():
     ) as client:
 
         # Step 0: Discover URL
-        if args.url:
-            csv_url = args.url
+        if url:
+            csv_url = url
             dataset_year = "unknown"
             print(f"Using manually provided URL: {csv_url}")
         else:
@@ -429,28 +430,29 @@ def main():
                 print("\nTo proceed manually:")
                 print("  1. Go to https://data.cms.gov/provider-summary-by-type-of-service/medicare-physician-other-practitioners/medicare-physician-other-practitioners-by-provider-and-service")
                 print("  2. Find the CSV download link for the most recent year")
-                print("  3. Re-run with: uv run find_by_procedures.py --url <URL>")
-                sys.exit(1)
+                print("  3. Re-run with: uv run scripts/find_by_procedures.py --url <URL>")
+                raise
 
         # Step 1: Download
         print("\n=== Downloading CMS utilization data ===")
         cms_path = download_cms_file(client, csv_url)
 
     # Step 2+3: Scan (no HTTP needed during scan)
-    providers = scan_utilization_file(cms_path, args.state, args.city)
+    providers = scan_utilization_file(cms_path, state, city)
 
     # Step 4: Filter and rank
     print("\n=== Filtering and ranking ===")
     ranked = sorted(providers.values(), key=lambda p: -p["total_weighted_score"])
-    ranked = [p for p in ranked if p["total_weighted_score"] >= args.min_score]
-    print(f"  Providers with score >= {args.min_score}: {len(ranked):,}")
+    ranked = [p for p in ranked if p["total_weighted_score"] >= min_score]
+    print(f"  Providers with score >= {min_score}: {len(ranked):,}")
 
     # Load published NPIs for cross-reference
-    published_npis = load_published_npis()
+    if published_npis is None:
+        published_npis = load_published_npis()
     print(f"  Published author NPIs loaded: {len(published_npis)}")
 
     # Enrich top providers via NPPES if CMS data lacks detail
-    top_providers = ranked[: args.top]
+    top_providers = ranked[:top]
 
     print(f"\n=== Enriching top {len(top_providers)} providers via NPPES ===")
     enriched = []
@@ -514,7 +516,48 @@ def main():
 
     print(f"  Done enriching {len(enriched)} providers")
 
-    # Step 5: Output
+    # Summary
+    print(f"\n=== Top 20 by weighted score ===")
+    print(f"{'Score':>8}  {'NPI':>12}  {'Name':<30}  {'Specialty':<35}  {'Location'}")
+    print("-" * 120)
+    for rec in enriched[:20]:
+        name = f"{rec.get('first_name', '')} {rec.get('last_name', '')}".strip()
+        loc = f"{rec.get('city', '')}, {rec.get('state', '')}".strip(", ")
+        spec = (rec.get("specialty") or "")[:35]
+        pub_flag = " *" if rec["also_published"] else ""
+        print(f"  {rec['weighted_score']:>6.0f}  {rec['npi']:>12}  {name:<30}  {spec:<35}  {loc}{pub_flag}")
+
+    published_also = sum(1 for r in enriched if r["also_published"])
+    print(f"\n* = also in published-author set ({published_also} total)")
+    print(f"\nDataset year: {dataset_year}")
+    print(f"Min score filter: {min_score}")
+    print(f"State filter: {state or 'none'}")
+    print(f"City filter: {city or 'none'}")
+
+    return enriched
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Find physicians by procedure volume")
+    parser.add_argument("--min-score", type=float, default=10.0, help="Minimum weighted score (default: 10)")
+    parser.add_argument("--state", help="Filter to providers in this state (e.g., IL)")
+    parser.add_argument("--city", help="Filter to providers in this city (e.g., Chicago)")
+    parser.add_argument("--url", help="Manual override: direct CSV download URL for CMS file")
+    parser.add_argument("--top", type=int, default=500, help="Max providers to enrich via NPPES (default: 500)")
+    args = parser.parse_args()
+
+    try:
+        enriched = run(
+            state=args.state,
+            city=args.city,
+            min_score=args.min_score,
+            top=args.top,
+            url=args.url,
+        )
+    except RuntimeError:
+        sys.exit(1)
+
+    # Output
     json_path = DATA_DIR / "procedure_physicians.json"
     csv_path = DATA_DIR / "procedure_physicians.csv"
 
@@ -538,24 +581,6 @@ def main():
                 row[code] = rec["procedure_volume"].get(code, {}).get("services", 0)
             writer.writerow(row)
     print(f"Saved {csv_path}")
-
-    # Summary
-    print(f"\n=== Top 20 by weighted score ===")
-    print(f"{'Score':>8}  {'NPI':>12}  {'Name':<30}  {'Specialty':<35}  {'Location'}")
-    print("-" * 120)
-    for rec in enriched[:20]:
-        name = f"{rec.get('first_name', '')} {rec.get('last_name', '')}".strip()
-        loc = f"{rec.get('city', '')}, {rec.get('state', '')}".strip(", ")
-        spec = (rec.get("specialty") or "")[:35]
-        pub_flag = " *" if rec["also_published"] else ""
-        print(f"  {rec['weighted_score']:>6.0f}  {rec['npi']:>12}  {name:<30}  {spec:<35}  {loc}{pub_flag}")
-
-    published_also = sum(1 for r in enriched if r["also_published"])
-    print(f"\n* = also in published-author set ({published_also} total)")
-    print(f"\nDataset year: {dataset_year}")
-    print(f"Min score filter: {args.min_score}")
-    print(f"State filter: {args.state or 'none'}")
-    print(f"City filter: {args.city or 'none'}")
 
 
 if __name__ == "__main__":

@@ -190,9 +190,8 @@ def deduplicate_authors(articles: list[dict]) -> list[dict]:
     return authors
 
 
-def main():
-    DATA_DIR.mkdir(exist_ok=True)
-
+def run() -> tuple[list[dict], list[dict]]:
+    """Run PubMed fetch pipeline. Returns (articles, authors)."""
     all_pmids: set[str] = set()
     all_articles: list[dict] = []
     seen_pmids: set[str] = set()
@@ -247,6 +246,14 @@ def main():
         )
     ]
     print(f"  of which ~{len(us_authors)} have US affiliations")
+
+    return all_articles, authors
+
+
+def main():
+    DATA_DIR.mkdir(exist_ok=True)
+
+    all_articles, authors = run()
 
     # Save outputs
     articles_path = DATA_DIR / "articles.json"

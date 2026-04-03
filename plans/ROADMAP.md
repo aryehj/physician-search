@@ -45,3 +45,6 @@ Some results may be name collisions (e.g., Campbell with mostly out-of-state net
 
 ### 6. Expand coverage beyond published authors
 ~~Addressed by Stage 4 (procedure-volume pipeline) and practice-colleague discovery.~~ CMS claims data finds high-volume practitioners who never publish; address matching finds colleagues of those who do. Remaining gaps: physicians who perform procedures but bill under a group NPI, or whose volume falls below Medicare reporting thresholds (typically <11 services/year). Hospital "find a doctor" pages could fill this further.
+
+### 7. Make this usable by normal people. 
+Normal people know MAYBE some words that are not medical terms of art for heir diagnosis or suspicion. Maybe just symptoms. Assuming a plain language description of an actual diagnoses, someone should be able to run the full pipeline to return published authors and the whole bit. 

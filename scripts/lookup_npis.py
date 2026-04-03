@@ -168,21 +168,8 @@ def match_author_to_npi(
     return npi_results
 
 
-def main():
-    query_all = "--all" in sys.argv
-
-    data_dir = Path("data")
-    authors_path = data_dir / "authors.json"
-
-    if not authors_path.exists():
-        print("Error: data/authors.json not found. Run fetch_authors.py first.")
-        sys.exit(1)
-
-    with open(authors_path) as f:
-        authors = json.load(f)
-
-    print(f"Loaded {len(authors)} authors from {authors_path}")
-
+def run(authors: list[dict], query_all: bool = False) -> list[dict]:
+    """Look up NPI numbers for authors. Returns list of physician dicts."""
     # Filter to queryable authors
     if query_all:
         candidates = authors
@@ -286,6 +273,26 @@ def main():
     print(f"  Name match (other spec):  {stats['found']}")
     print(f"  No NPI match:            {stats['no_match']}")
     print(f"  Total physician records:  {len(physicians)}")
+
+    return physicians
+
+
+def main():
+    query_all = "--all" in sys.argv
+
+    data_dir = Path("data")
+    authors_path = data_dir / "authors.json"
+
+    if not authors_path.exists():
+        print("Error: data/authors.json not found. Run fetch_authors.py first.")
+        sys.exit(1)
+
+    with open(authors_path) as f:
+        authors = json.load(f)
+
+    print(f"Loaded {len(authors)} authors from {authors_path}")
+
+    physicians = run(authors, query_all)
 
     # Save JSON
     json_path = data_dir / "physicians.json"
