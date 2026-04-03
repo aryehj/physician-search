@@ -21,13 +21,19 @@ This step informs how to approach automation.
 
 ## Next Decision
 
-### 4. Automated insurance cross-reference
-After the manual spot-check, choose one of:
+### 4. Automated insurance cross-reference via Anthem FHIR API
 
-- **Anthem FHIR API** — Register at anthem.com/developers and query the provider directory programmatically by NPI. Pros: structured, official, queryable. Cons: may require approval, unclear PPO coverage.
-- **Provider list import** — Export or download the plan's provider directory (CSV, PDF, or scraped from the portal) and match locally against our NPI list. Pros: works offline, no API dependency. Cons: manual export step, may go stale.
+**API details (researched 2026-04-03):**
 
-The spot-check results will clarify which path is more practical.
+Anthem exposes a CMS-mandated Provider Directory API (FHIR R4, DaVinci PDEX Plan Net IG 1.1.0) at `totalview.healthos.elevancehealth.com`. Key resources: Practitioner, PractitionerRole (specialty, network, location refs), Organization, Location, InsurancePlan. Supports `_include` for efficient joined queries.
+
+- **Registration:** Free at `anthem.com/developers/provider-directory-api-request` — application submitted, pending approval. OAuth 2.0 client credentials flow.
+- **Sandbox:** `sbx.totalview.healthos.elevancehealth.com/registration/sandbox/login` — may be accessible before production credentials arrive.
+- **Brand endpoints:** Each plan (Anthem BCBS, Anthem Blue Cross CA, Wellpoint, UniCare, etc.) has its own slug under `/resources/registered/{Brand}/api/v1/fhir`.
+- **Key query:** `PractitionerRole?specialty={NUCC_code}&_include=PractitionerRole:practitioner,PractitionerRole:location` — returns in-network providers with name, NPI, address in one call.
+- **Unregistered (public) endpoints** exist for Medicaid (`/resources/unregistered/api/v1/fhir/cms_mandate/mcd/`) — metadata works but data queries currently return 500.
+
+**Plan:** Once credentials arrive, write a third pipeline script to cross-reference our 306 specialty-matched NPIs against Anthem's in-network directory for the patient's specific plan.
 
 ## Open Problems
 
