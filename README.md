@@ -18,12 +18,17 @@ Two parallel pipelines that identify physicians with demonstrated familiarity wi
 
 **Stage 4 — `find_by_procedures.py`**: Independently identifies physicians who *perform* piriformis-relevant procedures at high volume, using CMS Medicare Provider Utilization and Payment Data. Auto-discovers and downloads the most recent dataset (~10M rows), filters by relevant HCPCS codes (27096, 20552/20553, 64450, 64640, nerve conduction studies, etc.) with weights, and ranks providers by weighted procedure score. Cross-references results against the published-author set. Supports `--state`/`--city` filters for geographic targeting.
 
+**Pipeline C: Practice-colleague-based**
+
+**`find_practice_colleagues.py`**: Finds physicians who share a practice location with known published experts. If Dr. A publishes on piriformis syndrome and Dr. B works at the same address, Dr. B likely has relevant experience. Takes seed physicians from Pipeline A, extracts their practice zip codes, queries NPPES for all relevant-specialty providers in those zips, and matches on normalized street address. Exact address matches are high-confidence; same-zip + relevant specialty is a weaker signal. Flags probable hospital campuses (>20 providers at one address) separately. Supports `--state`, `--match-type`, and `--hospital-threshold` options.
+
 Outputs land in `data/`:
 - `articles.json` — full article metadata (702 articles)
 - `authors.json` — deduplicated author list (2,647 authors)
 - `physicians.csv` / `physicians.json` — authors enriched with NPI and practice info (1,904 records, 306 with relevant specialties)
 - `in_network_physicians.csv` / `in_network_physicians.json` — Cook County physicians found in Anthem's provider directory
 - `procedure_physicians.csv` / `procedure_physicians.json` — physicians ranked by weighted procedure volume, with `also_published` flag for overlap with Pipeline A
+- `practice_colleagues.csv` / `practice_colleagues.json` — physicians at the same practice locations as published experts, with `match_type` and `match_confidence` fields
 
 ## Usage
 
@@ -40,6 +45,10 @@ uv run check_anthem_network.py     # Stage 3: ~1 min, hits Anthem FHIR API
 uv run find_by_procedures.py                        # All US, top 500 providers
 uv run find_by_procedures.py --state IL --city Chicago  # Filter geographically
 uv run find_by_procedures.py --min-score 20 --top 200   # Stricter filter
+
+# Pipeline C: practice-colleague-based (independent)
+uv run find_practice_colleagues.py                  # All states
+uv run find_practice_colleagues.py --state IL --match-type address  # Address matches only
 ```
 
 Stage 3 requires a `.env` file with Anthem API credentials (see below).

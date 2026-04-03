@@ -8,7 +8,7 @@ Physician Search — a tool to help patients find appropriate in-network physici
 
 ## Status
 
-Four-stage pipeline is functional across two parallel approaches. See [plans/ROADMAP.md](plans/ROADMAP.md) for what's done, what's next, and open problems. See `plans/` for implementation plans for upcoming work.
+Five scripts across three parallel pipelines. See [plans/ROADMAP.md](plans/ROADMAP.md) for what's done, what's next, and open problems. See `plans/` for implementation plans for upcoming work.
 
 ## Architecture
 
@@ -21,6 +21,9 @@ Four standalone Python scripts with inline `uv` dependency metadata (no pyprojec
 
 **Pipeline B — procedure-volume-based (independent):**
 - `find_by_procedures.py` — Auto-discovers and downloads the CMS Medicare Provider Utilization and Payment Data CSV (~300 MB, cached to `data/cms/`), scans ~10M rows for relevant HCPCS codes (weighted: 27096 piriformis injection = 10x, trigger point/nerve procedures = 1-2x), ranks providers by weighted score, enriches via NPPES if needed, cross-references against `data/physicians.json` published authors. Supports `--state`, `--city`, `--min-score`, `--top`, `--url` flags. Outputs `data/procedure_physicians.csv` and `data/procedure_physicians.json`.
+
+**Pipeline C — practice-colleague-based (independent):**
+- `find_practice_colleagues.py` — Reads `data/physicians.json` seed physicians (relevant-specialty + NPI), extracts their zip codes, queries NPPES for all relevant-specialty providers in those zips, then matches on normalized street address. Exact address matches = high confidence colleagues; same-zip + relevant-specialty = weaker signal. Flags probable hospital-campus addresses (>20 providers at one address) with lower confidence. Supports `--state`, `--match-type` (address|zip|both), `--hospital-threshold` flags. Outputs `data/practice_colleagues.csv` and `data/practice_colleagues.json`.
 
 All scripts use `httpx` for HTTP and respect API rate limits (~0.3-0.4s between requests).
 
@@ -42,6 +45,10 @@ uv run check_anthem_network.py     # Stage 3: Anthem network check (~1 min)
 # Pipeline B (independent)
 uv run find_by_procedures.py       # Stage 4: CMS procedure volume (~10 min first run, downloads ~300 MB)
 uv run find_by_procedures.py --state IL --city Chicago --min-score 10
+
+# Pipeline C (independent)
+uv run find_practice_colleagues.py           # all states
+uv run find_practice_colleagues.py --state IL --match-type address
 ```
 
 Stage 3 also supports `--probe` for raw API exploration:

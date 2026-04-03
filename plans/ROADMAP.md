@@ -13,6 +13,11 @@ Find physicians who *perform* piriformis-relevant procedures at high volume, ind
 
 This addresses the core limitation of Pipeline A: competent treating physicians who never publish are now discoverable.
 
+### 5. Practice-colleague discovery (NPPES address matching)
+Find physicians who share a practice location with known published piriformis experts. Takes seed physicians from Pipeline A, extracts their practice zip codes, queries NPPES for all relevant-specialty providers in those zips, and matches on normalized street address. Three confidence tiers: same address (36 high-confidence finds), same address at a probable hospital campus (361), and same zip + relevant specialty (1,967, noisier). Output: `data/practice_colleagues.json`, `data/practice_colleagues.csv`.
+
+Partially addresses the gap noted in Open Problem 6: physicians who work alongside publishing experts but don't publish themselves are now discoverable.
+
 ### 3. Anthem in-network check (Cook County, IL)
 Filter physicians to Cook County, IL (29 with NPIs), then query Anthem's FHIR Provider Directory to check in-network status. 10 of 29 found in directory, all accepting new patients. Network affiliations extracted from DaVinci Plan-Net extensions on PractitionerRole resources.
 
@@ -34,4 +39,4 @@ The API returns multiple network names per physician. Need to determine which ne
 Some results may be name collisions (e.g., Campbell with mostly out-of-state networks). Could improve by cross-referencing Anthem practice locations against NPPES practice addresses, or by filtering to physicians whose Anthem network list includes IL-specific networks.
 
 ### 6. Expand coverage beyond published authors
-~~Addressed by Stage 4 (procedure-volume pipeline).~~ CMS claims data finds high-volume practitioners who never publish. Remaining gaps: physicians who perform procedures but bill under a group NPI, or whose volume falls below Medicare reporting thresholds (typically <11 services/year). Practice group rosters and hospital "find a doctor" pages could fill this further.
+~~Addressed by Stage 4 (procedure-volume pipeline) and practice-colleague discovery.~~ CMS claims data finds high-volume practitioners who never publish; address matching finds colleagues of those who do. Remaining gaps: physicians who perform procedures but bill under a group NPI, or whose volume falls below Medicare reporting thresholds (typically <11 services/year). Hospital "find a doctor" pages could fill this further.
