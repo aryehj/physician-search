@@ -4,6 +4,7 @@
 # ///
 
 import argparse
+import csv
 import json
 import sys
 from pathlib import Path
@@ -131,6 +132,27 @@ def main():
         rec["rank"] = i
 
     save_json(ranked, DATA_DIR / "ranked_physicians.json")
+
+    csv_fields = [
+        "rank", "npi", "name", "credential", "specialty",
+        "city", "state", "zip", "address",
+        "score", "reasons",
+        "article_count", "in_anthem_network", "accepting_new_patients",
+        "anthem_networks",
+        "procedure_score",
+        "colleague_match_confidence", "colleague_match_type",
+        "sources",
+    ]
+    out_csv = DATA_DIR / "ranked_physicians.csv"
+    with open(out_csv, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=csv_fields, extrasaction="ignore")
+        writer.writeheader()
+        for rec in ranked:
+            row = dict(rec)
+            row["reasons"] = "; ".join(rec.get("reasons", []))
+            row["anthem_networks"] = "; ".join(rec.get("anthem_networks", []))
+            writer.writerow(row)
+    print(f"  Saved {out_csv} ({len(ranked)} records)")
 
     # Summary
     in_network_count = sum(1 for r in ranked if r.get("in_anthem_network"))
