@@ -72,7 +72,7 @@ uv run scripts/merge_and_rank.py --state IL --exclude-zip-only
 
 Stage 3 requires a `.env` file with Anthem API credentials (see below).
 
-On first run, the pipeline auto-discovers and downloads the CMS Medicare dataset (~300 MB), imports it into a DuckDB database (`data/cms/cms.duckdb`, ~50-80 MB compressed), and reuses it on subsequent runs. Pass `--refresh-cms` to force re-download.
+On first run, the pipeline auto-discovers and downloads the CMS Medicare dataset (~3,000 MB), imports it into a DuckDB database (`data/cms/cms.duckdb`, ~600 MB compressed), and reuses it on subsequent runs. Pass `--refresh-cms` to force re-download.
 
 ### Anthem API credentials
 
