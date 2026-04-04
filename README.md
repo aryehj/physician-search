@@ -24,7 +24,7 @@ Three parallel pipelines that identify physicians with demonstrated familiarity 
 
 Outputs land in `data/`:
 - `articles.json` — full article metadata (702 articles)
-- `authors.json` — deduplicated author list (2,647 authors)
+- `authors.json` — deduplicated author list (~2,800 authors)
 - `physicians.csv` / `physicians.json` — authors enriched with NPI and practice info (1,904 records, 306 with relevant specialties)
 - `in_network_physicians.csv` / `in_network_physicians.json` — Cook County physicians found in Anthem's provider directory
 - `procedure_physicians.csv` / `procedure_physicians.json` — physicians ranked by weighted procedure volume, with `also_published` flag for overlap with Pipeline A
