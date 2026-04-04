@@ -79,3 +79,37 @@ The pipeline had three performance bottlenecks: Stage 2 made ~1,000 serial NPPES
 - CMS data only covers Medicare billers. Younger physicians or those in purely private-pay practices won't appear in CMS lookups. The NPPES fallback in Stage 2 handles this, but CMS-matched physicians from Stage 2 lack street addresses (CMS only has city/state/zip). This reduces Stage 3's ability to do high-confidence address matching for those seeds.
 - `duckdb` is now a required dependency for all pipeline scripts (added to inline `uv` metadata).
 - The DuckDB file is ~50-80 MB vs ~300 MB for the raw CSV. Both are gitignored under `data/cms/`.
+
+## ADR-004: Affiliation-based geographic validation for author-to-NPI matching
+
+**Date:** 2026-04-04
+**Status:** Accepted
+
+### Context
+
+The author-to-NPI matching in `lookup_npis.py` used pure name-based matching: CMS DB lookup on `last_name` exact + `first_name` prefix, with no consideration of PubMed affiliation data. This produced false positives:
+
+- "Martin, Hal David" (hip surgeon in Dallas, TX) matched to NPI 1720647605, a Physician Assistant in Chicago — same name, completely different person.
+- "Verma, Nishank" (physiatrist in Chandigarh, India) matched to Nikhil N. Verma (sports medicine at Rush, Chicago) — common surname, first-name prefix `N%` matched both.
+
+These false matches propagated through the entire pipeline, inflating scores for wrong providers and attributing research expertise to people who didn't have it.
+
+### Decision
+
+Added three validation layers to both the CMS and NPPES matching phases in `lookup_npis.py`:
+
+1. **First-name compatibility** (`_first_name_compatible`): Compares author and provider first names beyond prefix matching. Handles initials, abbreviations, and multi-word names, but rejects clearly different names (Nishank != Nikhil).
+
+2. **Affiliation geographic validation** (`_affiliation_matches_location`): Extracts US state codes from PubMed affiliation strings (both abbreviations like ", TX " and full names like "Oklahoma"). Compares against provider's practice state. Returns `state_match`, `no_conflict`, or `state_mismatch`.
+
+3. **Non-US country detection**: Recognizes ~40 country names in affiliations. Authors with only non-US affiliations are flagged as `state_mismatch` against any US provider.
+
+Introduced a new match quality tier `affiliation_verified` (highest confidence) for matches where both specialty and geographic state align. Updated `merge_and_rank.py` `NPI_QUALITY_RANK` and scoring accordingly (+3 bonus for affiliation-verified).
+
+### Consequences
+
+- False positive matches like Martin and Verma are eliminated.
+- Authors with no affiliations (empty list) still pass through as `no_conflict` — permissive by design.
+- Authors with affiliations in multiple US states match providers in any of those states.
+- The country detection list (~40 entries) is not exhaustive; obscure country names may slip through as `no_conflict` rather than `state_mismatch`. This is acceptable — false negatives (missing a valid match) are less harmful than false positives (wrong person).
+- The `affiliation_verified` quality level is the new highest tier in `NPI_QUALITY_RANK`, above `relevant_specialty`.

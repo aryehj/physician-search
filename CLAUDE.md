@@ -19,7 +19,7 @@ Seven standalone Python scripts in `scripts/` with inline `uv` dependency metada
 
 **Pipeline A — publication-based:**
 - `scripts/fetch_authors.py` — Searches PubMed E-utilities API, parses article XML with `lxml`, deduplicates authors. Outputs `data/authors.json` and `data/articles.json`.
-- `scripts/lookup_npis.py` — Reads `data/authors.json`, matches authors to NPIs using CMS DuckDB for fast name lookup, falls back to concurrent NPPES API queries for misses. Outputs `data/physicians.csv` and `data/physicians.json`.
+- `scripts/lookup_npis.py` — Reads `data/authors.json`, matches authors to NPIs using CMS DuckDB for fast name lookup, falls back to concurrent NPPES API queries for misses. Applies three validation layers: (1) first-name compatibility check (rejects e.g. "Nishank" matching "Nikhil"), (2) affiliation-based geographic validation (extracts US states from PubMed affiliations, rejects matches where author's affiliation state doesn't match provider's practice state), (3) non-US country detection in affiliations. Match quality levels: `affiliation_verified` > `relevant_specialty` > `state_match` > `name_only` > `none`. Outputs `data/physicians.csv` and `data/physicians.json`.
 - `scripts/check_anthem_network.py` — Reads `data/physicians.json`, filters to Cook County IL, queries Anthem/Elevance FHIR Provider Directory (DaVinci Plan-Net IG) by name, matches on NPI, extracts network affiliations from FHIR extensions. Outputs `data/in_network_physicians.csv` and `data/in_network_physicians.json`. Requires `.env` with Anthem OAuth2 credentials.
 
 **Pipeline B — procedure-volume-based (independent):**
@@ -29,7 +29,7 @@ Seven standalone Python scripts in `scripts/` with inline `uv` dependency metada
 - `scripts/find_practice_colleagues.py` — Reads `data/physicians.json` seed physicians (relevant-specialty + NPI), extracts their zip codes, uses CMS DuckDB to find relevant-specialty providers in those zips, then fetches street addresses via concurrent NPPES queries for address matching. Exact address matches = high confidence colleagues; same-zip + relevant-specialty = weaker signal. Flags probable hospital-campus addresses (>20 providers at one address) with lower confidence. Supports `--state`, `--match-type` (address|zip|both), `--hospital-threshold` flags. Outputs `data/practice_colleagues.csv` and `data/practice_colleagues.json`.
 
 **Merge & Rank:**
-- `scripts/merge_and_rank.py` — Full outer join on NPI across all pipelines, computes composite scores, applies filters, outputs `data/ranked_physicians.csv` and `data/ranked_physicians.json`.
+- `scripts/merge_and_rank.py` — Full outer join on NPI across all pipelines, computes composite scores, applies filters, outputs `data/ranked_physicians.csv` and `data/ranked_physicians.json`. Quality ranking: `affiliation_verified` (0) > `relevant_specialty` (1) > `state_match` (2) > `name_only` (3) > `none` (4). Affiliation-verified matches get a +3 scoring bonus.
 
 All NPPES API queries use concurrent async HTTP (`httpx.AsyncClient` with semaphore, ~10 concurrent requests) via `batch_nppes()` in `cms_db.py`. CMS data is queried via DuckDB SQL (sub-second) instead of scanning CSV files. Shared constants (`RELEVANT_TAXONOMIES`, `RELEVANT_CMS_SPECIALTIES`, `TARGET_HCPCS`) live in `cms_db.py` — do not duplicate them in other scripts.
 
