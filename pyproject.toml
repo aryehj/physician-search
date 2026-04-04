@@ -1,0 +1,14 @@
+[project]
+name = "physician-search"
+version = "0.1.0"
+description = "Find in-network physicians with demonstrated expertise in specific medical conditions"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "lxml",
+    "python-dotenv",
+    "duckdb",
+]
+
+[project.scripts]
+physician-search = "main:main"

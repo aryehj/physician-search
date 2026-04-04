@@ -45,14 +45,14 @@ The pipeline needs to check top-ranked physicians against Anthem's network API, 
 
 `main.py` runs a 7-stage pipeline: Stages 1-4 gather data from three independent pipelines, Stage 5 does an initial merge/rank with `in_network=[]`, Stage 6 checks the top N against Anthem, and Stage 7 re-scores all records with the Anthem data and re-sorts. `compute_score` and `rank_sort_key` are imported from `merge_and_rank` so the scoring/sorting logic is defined in one place.
 
-The `fore_name`/`first_name` field name mismatch between merge_and_rank output and check_anthem_network input is handled by a temporary workaround in main.py, to be resolved in Phase 3 with schema normalization.
+The `fore_name`/`first_name` field name mismatch between merge_and_rank output and check_anthem_network input was resolved by making `check_anthem_network.run()` accept either field via fallback (`phys.get("fore_name") or phys.get("first_name", "")`).
 
 ### Consequences
 
 - Two-pass scoring means `compute_score` runs twice on all records. Acceptable at current scale (~2K records).
 - Stages 3 and 4 are independent and could be parallelized in a future optimization, but run sequentially for now.
 - The ranked_physicians.json file is only written once (after Stage 7), not after the initial Stage 5 merge.
-- The `fore_name` workaround is a known schema debt item tracked for Phase 3.
+- The `fore_name` workaround was resolved: `check_anthem_network.run()` now accepts both `fore_name` and `first_name` fields, and the workaround in `main.py` was removed.
 
 ## ADR-003: DuckDB for CMS data, concurrent NPPES queries
 

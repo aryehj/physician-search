@@ -12,7 +12,7 @@ Seven scripts in `scripts/` (six pipeline stages + one shared module) across thr
 
 ## Architecture
 
-Seven standalone Python scripts in `scripts/` with inline `uv` dependency metadata (no pyproject.toml). Each pipeline script exposes a `run()` function that accepts input data and returns output data; `main()` is a thin CLI wrapper handling file I/O.
+Seven standalone Python scripts in `scripts/` with inline `uv` dependency metadata. A `pyproject.toml` provides project-level metadata and consolidated deps for discoverability, but individual scripts still use their inline PEP 723 `# /// script` blocks for `uv run` standalone usage — both must be kept. Each pipeline script exposes a `run()` function that accepts input data and returns output data; `main()` is a thin CLI wrapper handling file I/O.
 
 **Shared infrastructure:**
 - `scripts/cms_db.py` — CMS Medicare data management via DuckDB. Downloads the CMS Provider Utilization CSV (~300 MB) once, imports into a compressed DuckDB database (`data/cms/cms.duckdb`, ~50-80 MB), and provides fast SQL queries for all pipeline stages. Also provides concurrent async NPPES batch query utilities and shared constants (specialty codes, taxonomy codes, HCPCS codes). Used by stages 2, 3, and 4.
@@ -20,7 +20,7 @@ Seven standalone Python scripts in `scripts/` with inline `uv` dependency metada
 **Pipeline A — publication-based:**
 - `scripts/fetch_authors.py` — Searches PubMed E-utilities API, parses article XML with `lxml`, deduplicates authors by `(last_name, first_name_token)` with accent normalization. Outputs `data/authors.json` and `data/articles.json`.
 - `scripts/lookup_npis.py` — Reads `data/authors.json`, matches authors to NPIs using CMS DuckDB for fast name lookup, falls back to concurrent NPPES API queries for misses. Applies three validation layers: (1) first-name compatibility check (rejects e.g. "Nishank" matching "Nikhil"), (2) affiliation-based geographic validation (extracts US states from PubMed affiliations, rejects matches where author's affiliation state doesn't match provider's practice state), (3) non-US country detection in affiliations. Match quality levels: `affiliation_verified` > `relevant_specialty` > `state_match` > `name_only` > `none`. Outputs `data/physicians.csv` and `data/physicians.json`.
-- `scripts/check_anthem_network.py` — Reads `data/physicians.json`, filters to Cook County IL, queries Anthem/Elevance FHIR Provider Directory (DaVinci Plan-Net IG) by name, matches on NPI, extracts network affiliations from FHIR extensions. Outputs `data/in_network_physicians.csv` and `data/in_network_physicians.json`. Requires `.env` with Anthem OAuth2 credentials.
+- `scripts/check_anthem_network.py` — Reads `data/physicians.json`, filters to Cook County IL (standalone) or accepts any physician list (from `main.py`), queries Anthem/Elevance FHIR Provider Directory (DaVinci Plan-Net IG) by name, matches on NPI, extracts network affiliations from FHIR extensions. Accepts both `fore_name` (PubMed field) and `first_name` (normalized field) via fallback. Outputs `data/in_network_physicians.csv` and `data/in_network_physicians.json`. Requires `.env` with Anthem OAuth2 credentials (see `.env.example` for template). Docstring includes adaptation notes for other insurers.
 
 **Pipeline B — procedure-volume-based (independent):**
 - `scripts/find_by_procedures.py` — Queries the CMS DuckDB database for relevant HCPCS codes (weighted: 27096 piriformis injection = 10x, trigger point/nerve procedures = 1-2x), ranks providers by weighted score, enriches via concurrent NPPES if needed, cross-references against published authors. Supports `--state`, `--city`, `--min-score`, `--top` flags. Outputs `data/procedure_physicians.csv` and `data/procedure_physicians.json`.
@@ -37,11 +37,12 @@ All NPPES API queries use concurrent async HTTP (`httpx.AsyncClient` with semaph
 
 - Python scripts run via `uv run` (inline dependencies, no virtual env setup needed)
 - `uv` cache may need `UV_CACHE_DIR` set to a writable path in sandboxed environments
+- `pyproject.toml` exists for project metadata; inline `# /// script` blocks in each script are what `uv run` actually uses
 - Scripts importable via `sys.path.insert(0, 'scripts')` for use by `main.py`
 - `DATA_DIR = Path("data")` is CWD-relative; run scripts from project root
 - Data outputs go to `data/` (gitignored)
 - CMS DuckDB database stored at `data/cms/cms.duckdb` (gitignored, auto-created on first run)
-- Anthem API credentials stored in `.env` (gitignored), loaded via `python-dotenv`
+- Anthem API credentials stored in `.env` (gitignored), loaded via `python-dotenv`; `.env.example` provides a template
 
 ## Running
 

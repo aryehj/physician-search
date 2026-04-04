@@ -23,10 +23,10 @@ Three parallel pipelines that identify physicians with demonstrated familiarity 
 **`scripts/find_practice_colleagues.py`**: Finds physicians who share a practice location with known published experts. If Dr. A publishes on piriformis syndrome and Dr. B works at the same address, Dr. B likely has relevant experience. Takes seed physicians from Pipeline A, extracts their practice zip codes, uses CMS DuckDB to find relevant-specialty providers in those zips, then fetches street addresses via concurrent NPPES queries for address matching. Exact address matches are high-confidence; same-zip + relevant specialty is a weaker signal. Flags probable hospital campuses (>20 providers at one address) separately. Supports `--state`, `--match-type`, and `--hospital-threshold` options.
 
 Outputs land in `data/`:
-- `articles.json` — full article metadata (702 articles)
-- `authors.json` — deduplicated author list (~2,800 authors)
-- `physicians.csv` / `physicians.json` — authors enriched with NPI and practice info (1,904 records, 306 with relevant specialties)
-- `in_network_physicians.csv` / `in_network_physicians.json` — Cook County physicians found in Anthem's provider directory
+- `articles.json` — full article metadata
+- `authors.json` — deduplicated author list
+- `physicians.csv` / `physicians.json` — authors enriched with NPI and practice info, filtered to relevant specialties
+- `in_network_physicians.csv` / `in_network_physicians.json` — physicians found in the insurer's provider directory
 - `procedure_physicians.csv` / `procedure_physicians.json` — physicians ranked by weighted procedure volume, with `also_published` flag for overlap with Pipeline A
 - `practice_colleagues.csv` / `practice_colleagues.json` — physicians at the same practice locations as published experts, with `match_type` and `match_confidence` fields
 - `ranked_physicians.csv` / `ranked_physicians.json` — final merged and ranked output across all pipelines, with composite scores, in-network status, and multi-pipeline combination bonuses. CSV uses human-readable headers (Publications, Procedure Score, In Network, Colleague, Combo Bonus, etc.) with atomic columns instead of a reasons blob
@@ -76,7 +76,7 @@ On first run, the pipeline auto-discovers and downloads the CMS Medicare dataset
 
 ### Anthem API credentials
 
-Register at Anthem's developer portal to obtain credentials, then create a `.env` file in the project root:
+Register at Anthem's developer portal to obtain credentials, then create a `.env` file in the project root (see `.env.example` for a template):
 
 ```
 ANTHEM_CLIENT_ID=...
@@ -86,6 +86,29 @@ ANTHEM_PROVIDER_DIRECTORY_URL=...
 ```
 
 The `.env` file is gitignored and never committed.
+
+This project currently supports Anthem/Elevance Health's FHIR Provider Directory (DaVinci Plan-Net IG). Other insurers that implement the same IG should work with minimal changes — see the docstring in `scripts/check_anthem_network.py` for adaptation notes.
+
+## Customization
+
+To adapt this tool for a different condition, insurer, or geographic area, there are three things to change:
+
+### Medical condition
+
+- **PubMed search terms**: Edit `SEARCH_TERMS` in `scripts/fetch_authors.py` to match your condition.
+- **Procedure codes and weights**: Edit `TARGET_HCPCS` in `scripts/cms_db.py` — these are the HCPCS codes that indicate relevant procedural expertise, with relative weights.
+- **Provider specialties**: Edit `RELEVANT_CMS_SPECIALTIES` and `RELEVANT_TAXONOMIES` in `scripts/cms_db.py` to match the specialties that treat your condition.
+
+### Insurance provider
+
+- Set the four environment variables in `.env` to point to your insurer's FHIR endpoint (see `.env.example`).
+- If your insurer uses a different auth method than OAuth2 client credentials, modify `get_access_token()` in `scripts/check_anthem_network.py`.
+- If the insurer's directory doesn't follow the DaVinci Plan-Net IG, the FHIR parsing logic in `run()` may need adjustment.
+
+### Geographic area
+
+- For standalone mode, replace the `COOK_COUNTY_CITIES` set in `scripts/check_anthem_network.py` with municipalities in your area.
+- Use the `--state` and `--city` CLI flags to filter results geographically.
 
 ## Next steps
 

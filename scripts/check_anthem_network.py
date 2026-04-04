@@ -11,6 +11,15 @@ Outputs: data/in_network_physicians.json
          data/in_network_physicians.csv
 
 Usage: uv run check_anthem_network.py
+
+Adapting for a different insurer:
+- Set the four env vars in .env to point to your insurer's FHIR endpoint
+- The OAuth2 flow (client credentials grant) is standard; if your insurer
+  uses a different auth method, modify get_access_token()
+- The FHIR Practitioner/PractitionerRole queries follow the DaVinci Plan-Net IG;
+  any insurer implementing this IG should work with minimal changes
+- The COOK_COUNTY_CITIES filter (used only in standalone mode) should be
+  replaced with your geographic area of interest
 """
 
 import csv
@@ -32,7 +41,10 @@ ANTHEM_CLIENT_SECRET = os.environ.get("ANTHEM_CLIENT_SECRET")
 ANTHEM_TOKEN_URL = os.environ.get("ANTHEM_ACCESS_TOKEN_URL")
 FHIR_BASE = os.environ.get("ANTHEM_PROVIDER_DIRECTORY_URL")
 
-# Cook County, IL municipalities (not exhaustive — add as needed)
+# CUSTOMIZE: Replace with municipalities in your geographic area of interest.
+# This set is only used by main() in standalone mode; when called from main.py,
+# the geographic filter is handled by the caller.
+# Current default: Cook County, IL municipalities (not exhaustive — add as needed)
 # Source: Cook County Clerk's office municipality list
 COOK_COUNTY_CITIES = {
     # Chicago
@@ -171,11 +183,12 @@ def run(physicians: list[dict]) -> list[dict]:
         not_found = []
 
         for i, phys in enumerate(physicians):
-            name = f"{phys['fore_name']} {phys['last_name']}"
+            first = phys.get("fore_name") or phys.get("first_name", "")
+            name = f"{first} {phys['last_name']}"
             npi = phys["npi"]
             print(f"  [{i + 1}/{len(physicians)}] {name} (NPI {npi})...", end=" ", flush=True)
 
-            entries = search_practitioner(client, token, phys["last_name"], phys["fore_name"])
+            entries = search_practitioner(client, token, phys["last_name"], first)
 
             if not entries:
                 print("not in directory")
@@ -284,7 +297,8 @@ def run(physicians: list[dict]) -> list[dict]:
         accepting = "accepting new patients" if p.get("accepting_new_patients") else "not confirmed accepting"
         city = p.get("practice_city") or p.get("city") or "?"
         state = p.get("practice_state") or p.get("state") or "?"
-        name = f"{p.get('fore_name') or p.get('first_name', '')} {p['last_name']}"
+        first = p.get("fore_name") or p.get("first_name", "")
+        name = f"{first} {p['last_name']}"
         print(
             f"  {name}, {p.get('credential') or '?'} "
             f"— {p.get('specialty', '?')} — {city}, {state} "

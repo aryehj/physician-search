@@ -114,13 +114,6 @@ def _run_pipeline(args, cms_db):
     print("=" * 60)
     top_n = ranked[:args.top]
 
-    # TEMPORARY WORKAROUND (removed in Phase 3):
-    # merge_and_rank output uses first_name, but check_anthem_network
-    # expects fore_name for the FHIR name search.
-    for rec in top_n:
-        if "fore_name" not in rec:
-            rec["fore_name"] = rec.get("first_name", "")
-
     in_network = check_anthem_network_run(top_n)
     save_json(in_network, DATA_DIR / "in_network_physicians.json")
 
