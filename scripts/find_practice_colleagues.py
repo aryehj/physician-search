@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["httpx"]
+# dependencies = ["httpx", "duckdb"]
 # ///
 """
 Find physicians who work at the same practice location as known published experts.
@@ -8,12 +8,16 @@ Find physicians who work at the same practice location as known published expert
 If Dr. A publishes on piriformis syndrome and Dr. B works in the same pain
 management office, Dr. B likely has relevant experience too.
 
+When a CMS DuckDB database is available, uses it to quickly identify
+relevant-specialty providers in seed zip codes, then fetches street addresses
+from NPPES concurrently for address matching.
+
 Reads:   data/physicians.json (from lookup_npis.py)
 Outputs: data/practice_colleagues.csv
          data/practice_colleagues.json
 
-Usage: uv run find_practice_colleagues.py [--state IL] [--match-type address|zip|both]
-                                           [--hospital-threshold 20]
+Usage: uv run find_practice_colleagues.py [--state IL]
+           [--match-type address|zip|both] [--hospital-threshold 20]
 """
 
 import argparse
@@ -21,61 +25,30 @@ import csv
 import json
 import re
 import sys
-import time
 from collections import defaultdict
 from pathlib import Path
 
-import httpx
+from cms_db import (
+    TAXONOMY_SEARCH_TERMS,
+    batch_nppes,
+    parse_nppes_result,
+)
 
-NPPES_API = "https://npiregistry.cms.hhs.gov/api/"
+DATA_DIR = Path("data")
 
-RELEVANT_TAXONOMIES = {
-    "208100000X": "PM&R",
-    "2081P2900X": "PM&R - Pain Medicine",
-    "2081P0010X": "PM&R - Pediatric Rehab",
-    "2081S0010X": "PM&R - Sports Medicine",
-    "208VP0014X": "Pain Medicine",
-    "2083P0500X": "Preventive Medicine - Pain Medicine",
-    "2084N0400X": "Neurology",
-    "2084N0402X": "Neurology - Neuromuscular",
-    "2084P0800X": "Neurology - Pain Medicine",
-    "2084P0805X": "Neurology - Pediatric Neurology",
-    "207X00000X": "Orthopaedic Surgery",
-    "207XS0114X": "Orthopaedic Surgery - Sports Medicine",
-    "207XP3100X": "Orthopaedic Surgery - Pediatric",
-    "207T00000X": "Neurological Surgery",
-    "207L00000X": "Anesthesiology",
-    "207LP2900X": "Anesthesiology - Pain Medicine",
-    "204C00000X": "Sports Medicine",
-    "2085R0001X": "Radiology - Interventional",
-    "208600000X": "Surgery",
-}
-
-# Taxonomy description search terms — NPPES does partial matching on these
-TAXONOMY_SEARCH_TERMS = [
-    "Pain Medicine",
-    "Physical Medicine",
-    "Orthopaedic",
-    "Neurological Surgery",
-    "Neurology",
-    "Anesthesiology",
-    "Sports Medicine",
-    "Interventional",
-]
+CONFIDENCE_ORDER = {"high": 0, "low_hospital_campus": 1, "low_zip_only": 2}
 
 
 def normalize_address(addr_line: str) -> str:
     """Normalize address line for comparison."""
     s = addr_line.upper().strip()
-    # Remove suite/unit identifiers and trailing tokens
     s = re.sub(r'\b(STE|SUITE|UNIT|APT|#)\s*\w*', '', s)
-    # Collapse whitespace
     s = re.sub(r'\s+', ' ', s).strip()
     return s
 
 
 def extract_zip(practice_address: str) -> str | None:
-    """Extract 5-digit zip from a practice_address string like '123 Main St, Chicago, IL 60601'."""
+    """Extract 5-digit zip from a practice_address string."""
     if not practice_address:
         return None
     m = re.search(r'\b(\d{5})\b', practice_address)
@@ -83,75 +56,10 @@ def extract_zip(practice_address: str) -> str | None:
 
 
 def extract_street(practice_address: str) -> str | None:
-    """Extract street line (first comma-separated component) from practice_address string."""
+    """Extract street line (first comma-separated component)."""
     if not practice_address:
         return None
     return practice_address.split(',')[0].strip()
-
-
-def query_nppes_by_zip(client: httpx.Client, postal_code: str, taxonomy_description: str) -> list[dict]:
-    """Query NPPES for individual providers by zip code and taxonomy description."""
-    try:
-        resp = client.get(
-            NPPES_API,
-            params={
-                "version": "2.1",
-                "postal_code": postal_code,
-                "taxonomy_description": taxonomy_description,
-                "enumeration_type": "NPI-1",
-                "limit": 200,
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except (httpx.HTTPError, json.JSONDecodeError) as e:
-        print(f"    Error querying NPPES zip={postal_code} / {taxonomy_description}: {e}")
-        return []
-    return data.get("results", [])
-
-
-def parse_provider(r: dict) -> dict:
-    """Parse an NPPES result record into a normalized provider dict."""
-    basic = r.get("basic", {})
-
-    practice_addr = None
-    for addr in r.get("addresses", []):
-        if addr.get("address_purpose") == "LOCATION":
-            practice_addr = {
-                "address_1": addr.get("address_1", ""),
-                "address_2": addr.get("address_2", ""),
-                "city": addr.get("city", ""),
-                "state": addr.get("state", ""),
-                "postal_code": addr.get("postal_code", "")[:5],
-            }
-            break
-
-    specialties = []
-    is_relevant = False
-    for tax in r.get("taxonomies", []):
-        code = tax.get("code", "")
-        specialties.append({
-            "code": code,
-            "description": tax.get("desc", ""),
-            "primary": tax.get("primary", False),
-        })
-        if code in RELEVANT_TAXONOMIES:
-            is_relevant = True
-
-    primary_spec = next(
-        (s["description"] for s in specialties if s["primary"]),
-        specialties[0]["description"] if specialties else None,
-    )
-
-    return {
-        "npi": r.get("number"),
-        "first_name": basic.get("first_name", ""),
-        "last_name": basic.get("last_name", ""),
-        "credential": basic.get("credential", ""),
-        "specialty": primary_spec,
-        "is_relevant_specialty": is_relevant,
-        "practice_address": practice_addr,
-    }
 
 
 def run(
@@ -159,8 +67,17 @@ def run(
     state: str | None = None,
     match_type: str = "both",
     hospital_threshold: int = 20,
+    cms_db=None,
 ) -> list[dict]:
-    """Find practice colleagues of seed physicians. Returns colleague list."""
+    """Find practice colleagues of seed physicians. Returns colleague list.
+
+    Args:
+        physicians: Physician records from lookup_npis.
+        state: Optional state filter for seeds.
+        match_type: "address", "zip", or "both".
+        hospital_threshold: Flag addresses with this many+ providers as hospital.
+        cms_db: Optional CmsDb instance for fast zip lookups.
+    """
     # Seed = relevant-specialty physicians with a known NPI and practice address
     seeds = [
         p for p in physicians
@@ -170,7 +87,10 @@ def run(
     ]
 
     if state:
-        seeds = [p for p in seeds if p.get("practice_state", "").upper() == state.upper()]
+        seeds = [
+            p for p in seeds
+            if p.get("practice_state", "").upper() == state.upper()
+        ]
         print(f"Loaded {len(seeds)} seed physicians in {state.upper()}")
     else:
         print(f"Loaded {len(seeds)} seed physicians with relevant specialties")
@@ -195,105 +115,200 @@ def run(
             "state": p.get("practice_state", "").upper().strip(),
         })
 
-    print(f"Searching {len(zip_to_seeds)} unique zip codes across {len(TAXONOMY_SEARCH_TERMS)} specialty terms each\n")
+    zip_list = sorted(zip_to_seeds.keys())
+    print(f"Searching {len(zip_list)} unique zip codes\n")
 
-    colleagues: dict[str, dict] = {}  # npi -> colleague record
+    # --- Discover providers in each zip ---
+    # Strategy: if CMS DB available, use it to find NPIs, then batch-query
+    # NPPES for street addresses. Otherwise, batch-query NPPES by zip+taxonomy.
 
-    with httpx.Client(timeout=15.0) as client:
-        zip_list = sorted(zip_to_seeds.keys())
+    # Maps: zip -> {npi: provider_dict}
+    zip_providers: dict[str, dict[str, dict]] = {}
 
-        for z_idx, zip_code in enumerate(zip_list):
-            seed_entries = zip_to_seeds[zip_code]
-            print(f"[{z_idx+1}/{len(zip_list)}] Zip {zip_code} — {len(seed_entries)} seed location(s)", end="", flush=True)
+    if cms_db:
+        # Phase 1: CMS DB lookup for all zips at once (instant)
+        print("=== CMS database lookup for zip providers ===")
+        all_cms_npis = set()
+        for zip_code in zip_list:
+            results = cms_db.providers_in_zip(zip_code, relevant_only=True)
+            zip_providers[zip_code] = {}
+            for r in results:
+                npi = r["npi"]
+                if npi:
+                    zip_providers[zip_code][npi] = {
+                        "npi": npi,
+                        "first_name": r.get("first_name", ""),
+                        "last_name": r.get("last_name", ""),
+                        "credential": r.get("credential", ""),
+                        "specialty": r.get("specialty"),
+                        "is_relevant_specialty": True,
+                        "practice_address": None,  # need NPPES for this
+                    }
+                    all_cms_npis.add(npi)
 
-            # Collect all providers in this zip, deduplicated by NPI
-            zip_providers: dict[str, dict] = {}
-            for term in TAXONOMY_SEARCH_TERMS:
-                for r in query_nppes_by_zip(client, zip_code, term):
-                    p = parse_provider(r)
-                    if p["npi"] and p["npi"] not in zip_providers:
-                        zip_providers[p["npi"]] = p
-                time.sleep(0.35)
+        total_providers = sum(len(v) for v in zip_providers.values())
+        print(f"  Found {total_providers} providers across {len(zip_list)} zips")
 
-            new_providers = {npi: p for npi, p in zip_providers.items() if npi not in seed_npis}
-            print(f" — {len(zip_providers)} providers found, {len(new_providers)} new")
+        # Phase 2: Batch NPPES by NPI for street addresses
+        # Only query non-seed NPIs (we don't need addresses for seeds)
+        npis_needing_address = all_cms_npis - seed_npis
+        if npis_needing_address:
+            print(
+                f"\n=== Fetching addresses for {len(npis_needing_address)} "
+                f"providers via NPPES (concurrent) ==="
+            )
+            npi_list = list(npis_needing_address)
+            param_list = [
+                {"number": npi, "enumeration_type": "NPI-1"}
+                for npi in npi_list
+            ]
+            responses = batch_nppes(param_list)
 
-            # Flag hospital-campus addresses: too many providers at the same address
-            addr_counts: dict[str, int] = defaultdict(int)
-            for p in zip_providers.values():
-                pa = p.get("practice_address") or {}
-                norm = normalize_address(pa.get("address_1", ""))
-                if norm:
-                    addr_counts[norm] += 1
-            hospital_addresses = {
-                addr for addr, count in addr_counts.items()
-                if count >= hospital_threshold
-            }
-            if hospital_addresses:
-                print(f"  Flagged {len(hospital_addresses)} hospital-campus address(es) (>= {hospital_threshold} providers)")
-
-            # Match each new relevant-specialty provider against seed addresses
-            for npi, provider in new_providers.items():
-                if not provider.get("is_relevant_specialty"):
+            npi_to_addr = {}
+            for npi, resp in zip(npi_list, responses):
+                if resp.get("error") or not resp.get("results"):
                     continue
+                parsed = parse_nppes_result(resp["results"][0])
+                npi_to_addr[npi] = parsed.get("practice_address")
 
-                pa = provider.get("practice_address") or {}
-                provider_street = normalize_address(pa.get("address_1", ""))
-                provider_city = pa.get("city", "").upper().strip()
-                is_hospital = provider_street in hospital_addresses
+            # Merge addresses back into zip_providers
+            for zip_code in zip_list:
+                for npi, prov in zip_providers[zip_code].items():
+                    if npi in npi_to_addr and npi_to_addr[npi]:
+                        prov["practice_address"] = npi_to_addr[npi]
 
-                # Check for same-address seeds
+            errors = sum(1 for r in responses if r.get("error"))
+            print(f"  Addresses resolved: {len(npi_to_addr)}, errors: {errors}")
+
+    else:
+        # Fallback: batch all NPPES zip+taxonomy queries concurrently
+        print("=== Querying NPPES for zip providers (concurrent) ===")
+        param_list = []
+        param_keys = []  # (zip_code, term) for mapping responses back
+        for zip_code in zip_list:
+            zip_providers[zip_code] = {}
+            for term in TAXONOMY_SEARCH_TERMS:
+                param_list.append({
+                    "postal_code": zip_code,
+                    "taxonomy_description": term,
+                    "enumeration_type": "NPI-1",
+                    "limit": 200,
+                })
+                param_keys.append((zip_code, term))
+
+        print(
+            f"  {len(param_list)} queries "
+            f"({len(zip_list)} zips × {len(TAXONOMY_SEARCH_TERMS)} terms)"
+        )
+        responses = batch_nppes(param_list)
+
+        for (zip_code, _), resp in zip(param_keys, responses):
+            if resp.get("error"):
+                continue
+            for r in resp.get("results", []):
+                p = parse_nppes_result(r)
+                npi = p["npi"]
+                if npi and npi not in zip_providers[zip_code]:
+                    zip_providers[zip_code][npi] = p
+
+        total = sum(len(v) for v in zip_providers.values())
+        errors = sum(1 for r in responses if r.get("error"))
+        print(f"  Found {total} providers, {errors} query errors")
+
+    # --- Match colleagues ---
+    colleagues: dict[str, dict] = {}
+
+    for zip_code in zip_list:
+        seed_entries = zip_to_seeds[zip_code]
+        providers = zip_providers.get(zip_code, {})
+        new_providers = {
+            npi: p for npi, p in providers.items() if npi not in seed_npis
+        }
+
+        # Flag hospital-campus addresses
+        addr_counts: dict[str, int] = defaultdict(int)
+        for p in providers.values():
+            pa = p.get("practice_address")
+            pa = pa if isinstance(pa, dict) else {}
+            norm = normalize_address(pa.get("address_1", ""))
+            if norm:
+                addr_counts[norm] += 1
+        hospital_addresses = {
+            addr for addr, count in addr_counts.items()
+            if count >= hospital_threshold
+        }
+
+        for npi, provider in new_providers.items():
+            if not provider.get("is_relevant_specialty"):
+                continue
+
+            pa = provider.get("practice_address")
+            pa = pa if isinstance(pa, dict) else {}
+            provider_street = normalize_address(pa.get("address_1", ""))
+            provider_city = pa.get("city", "").upper().strip()
+            is_hospital = provider_street in hospital_addresses if provider_street else False
+
+            # Check for same-address seeds
+            matching_seed_npis = []
+            if provider_street:
                 matching_seed_npis = [
                     e["seed_npi"] for e in seed_entries
-                    if provider_street == e["norm_street"] and provider_city == e["city"]
+                    if provider_street == e["norm_street"]
+                    and provider_city == e["city"]
                 ]
 
-                if matching_seed_npis:
-                    if match_type == "zip":
-                        continue  # address matches excluded in zip-only mode
-                    match_type_val = "same_address_hospital_campus" if is_hospital else "same_address"
-                    match_confidence = "low_hospital_campus" if is_hospital else "high"
-                else:
-                    if match_type == "address":
-                        continue  # zip-only matches excluded in address-only mode
-                    match_type_val = "same_zip_specialty"
-                    match_confidence = "low_zip_only"
-                    matching_seed_npis = [e["seed_npi"] for e in seed_entries]
+            if matching_seed_npis:
+                if match_type == "zip":
+                    continue
+                match_type_val = (
+                    "same_address_hospital_campus" if is_hospital
+                    else "same_address"
+                )
+                match_confidence = (
+                    "low_hospital_campus" if is_hospital else "high"
+                )
+            else:
+                if match_type == "address":
+                    continue
+                match_type_val = "same_zip_specialty"
+                match_confidence = "low_zip_only"
+                matching_seed_npis = [e["seed_npi"] for e in seed_entries]
 
-                if npi in colleagues:
-                    # Seen via another zip — merge seed list and upgrade confidence if better
-                    existing = colleagues[npi]
-                    for s in matching_seed_npis:
-                        if s not in existing["colleague_of"]:
-                            existing["colleague_of"].append(s)
-                    rank = {"high": 0, "low_hospital_campus": 1, "low_zip_only": 2}
-                    if rank.get(match_confidence, 9) < rank.get(existing["match_confidence"], 9):
-                        existing["match_type"] = match_type_val
-                        existing["match_confidence"] = match_confidence
-                else:
-                    colleagues[npi] = {
-                        "npi": npi,
-                        "first_name": provider["first_name"],
-                        "last_name": provider["last_name"],
-                        "credential": provider["credential"],
-                        "specialty": provider["specialty"],
-                        "practice_address_1": pa.get("address_1", ""),
-                        "practice_city": pa.get("city", ""),
-                        "practice_state": pa.get("state", ""),
-                        "practice_zip": pa.get("postal_code", ""),
-                        "colleague_of": list(matching_seed_npis),
-                        "match_type": match_type_val,
-                        "match_confidence": match_confidence,
-                    }
+            if npi in colleagues:
+                existing = colleagues[npi]
+                for s in matching_seed_npis:
+                    if s not in existing["colleague_of"]:
+                        existing["colleague_of"].append(s)
+                if CONFIDENCE_ORDER.get(match_confidence, 9) < CONFIDENCE_ORDER.get(
+                    existing["match_confidence"], 9
+                ):
+                    existing["match_type"] = match_type_val
+                    existing["match_confidence"] = match_confidence
+            else:
+                colleagues[npi] = {
+                    "npi": npi,
+                    "first_name": provider.get("first_name", ""),
+                    "last_name": provider.get("last_name", ""),
+                    "credential": provider.get("credential", ""),
+                    "specialty": provider.get("specialty", ""),
+                    "practice_address_1": pa.get("address_1", ""),
+                    "practice_city": pa.get("city", ""),
+                    "practice_state": pa.get("state", ""),
+                    "practice_zip": pa.get("postal_code", zip_code),
+                    "colleague_of": list(matching_seed_npis),
+                    "match_type": match_type_val,
+                    "match_confidence": match_confidence,
+                }
 
     results = list(colleagues.values())
 
-    # Sort: high confidence first, hospital campus next, zip-only last
-    confidence_order = {"high": 0, "low_hospital_campus": 1, "low_zip_only": 2}
-    results.sort(key=lambda x: confidence_order.get(x["match_confidence"], 9))
+    results.sort(key=lambda x: CONFIDENCE_ORDER.get(x["match_confidence"], 9))
 
     n_same_addr = sum(1 for r in results if r["match_type"] == "same_address")
-    n_hospital = sum(1 for r in results if r["match_type"] == "same_address_hospital_campus")
+    n_hospital = sum(
+        1 for r in results
+        if r["match_type"] == "same_address_hospital_campus"
+    )
     n_zip = sum(1 for r in results if r["match_type"] == "same_zip_specialty")
 
     print(f"\n=== Results ===")
@@ -306,8 +321,14 @@ def run(
     if high:
         print(f"\n=== High-confidence matches ({len(high)}) ===")
         for r in high[:20]:
-            loc = f"{r['practice_address_1']}, {r['practice_city']}, {r['practice_state']}"
-            print(f"  {r['first_name']} {r['last_name']}, {r['credential'] or '?'} — {r['specialty']} — {loc}")
+            loc = (
+                f"{r['practice_address_1']}, {r['practice_city']}, "
+                f"{r['practice_state']}"
+            )
+            print(
+                f"  {r['first_name']} {r['last_name']}, "
+                f"{r['credential'] or '?'} — {r['specialty']} — {loc}"
+            )
         if len(high) > 20:
             print(f"  ... and {len(high) - 20} more")
 
@@ -316,22 +337,21 @@ def run(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Find physicians at the same practice locations as known piriformis experts."
+        description="Find physicians at the same practice locations as known "
+        "piriformis experts."
     )
     parser.add_argument("--state", help="Filter seed physicians by state (e.g. IL)")
     parser.add_argument(
         "--match-type", choices=["address", "zip", "both"], default="both",
-        help="Match type to include: address (same street), zip (same zip+specialty), or both (default)"
+        help="Match type: address, zip, or both (default)",
     )
     parser.add_argument(
         "--hospital-threshold", type=int, default=20,
-        help="Providers at one address before flagging as hospital campus (default: 20)"
+        help="Providers at one address before flagging as hospital (default: 20)",
     )
     args = parser.parse_args()
 
-    data_dir = Path("data")
-    physicians_path = data_dir / "physicians.json"
-
+    physicians_path = DATA_DIR / "physicians.json"
     if not physicians_path.exists():
         print("Error: data/physicians.json not found. Run lookup_npis.py first.")
         sys.exit(1)
@@ -339,22 +359,35 @@ def main():
     with open(physicians_path) as f:
         all_physicians = json.load(f)
 
+    # Try to use CMS DB if available
+    cms_db = None
+    try:
+        from cms_db import CmsDb, DB_PATH
+        if DB_PATH.exists():
+            cms_db = CmsDb.ensure()
+    except Exception as e:
+        print(f"CMS database not available ({e}), using NPPES only")
+
     results = run(
         all_physicians,
         state=args.state,
         match_type=args.match_type,
         hospital_threshold=args.hospital_threshold,
+        cms_db=cms_db,
     )
+
+    if cms_db:
+        cms_db.close()
 
     if not results:
         sys.exit(1)
 
-    json_path = data_dir / "practice_colleagues.json"
+    json_path = DATA_DIR / "practice_colleagues.json"
     with open(json_path, "w") as f:
         json.dump(results, f, indent=2)
     print(f"\nSaved {json_path}")
 
-    csv_path = data_dir / "practice_colleagues.csv"
+    csv_path = DATA_DIR / "practice_colleagues.csv"
     fieldnames = [
         "npi", "first_name", "last_name", "credential", "specialty",
         "practice_address_1", "practice_city", "practice_state", "practice_zip",

@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["httpx", "lxml", "python-dotenv"]
+# dependencies = ["httpx", "lxml", "python-dotenv", "duckdb"]
 # ///
 
 import argparse
@@ -18,6 +18,7 @@ from find_by_procedures import run as find_by_procedures_run
 from merge_and_rank import run as merge_and_rank_run
 from merge_and_rank import compute_score, rank_sort_key
 from check_anthem_network import run as check_anthem_network_run
+from cms_db import CmsDb
 
 DATA_DIR = Path("data")
 
@@ -34,10 +35,31 @@ def main():
     parser.add_argument("--state", help="Filter by state (e.g. IL)")
     parser.add_argument("--city", help="Filter by city (e.g. Chicago)")
     parser.add_argument("--top", type=int, default=200, help="Top N to check against Anthem (default: 200)")
+    parser.add_argument(
+        "--refresh-cms", action="store_true",
+        help="Force re-download and re-import of CMS Medicare data into DuckDB",
+    )
+    parser.add_argument(
+        "--cms-url",
+        help="Manual override: direct CSV download URL for CMS file",
+    )
     args = parser.parse_args()
 
     DATA_DIR.mkdir(exist_ok=True)
 
+    # Stage 0: Initialize CMS DuckDB database (used by stages 2, 3, 4)
+    print("\n" + "=" * 60)
+    print("STAGE 0: Initialize CMS database (DuckDB)")
+    print("=" * 60)
+    cms_db = CmsDb.ensure(refresh=args.refresh_cms, csv_url=args.cms_url)
+
+    try:
+        _run_pipeline(args, cms_db)
+    finally:
+        cms_db.close()
+
+
+def _run_pipeline(args, cms_db):
     # Stage 1: Fetch authors from PubMed
     print("\n" + "=" * 60)
     print("STAGE 1: Fetch authors from PubMed")
@@ -46,21 +68,21 @@ def main():
     save_json(articles, DATA_DIR / "articles.json")
     save_json(authors, DATA_DIR / "authors.json")
 
-    # Stage 2: Look up NPI numbers
+    # Stage 2: Look up NPI numbers (CMS DB + concurrent NPPES)
     print("\n" + "=" * 60)
     print("STAGE 2: Look up NPI numbers")
     print("=" * 60)
-    physicians = lookup_npis_run(authors)
+    physicians = lookup_npis_run(authors, cms_db=cms_db)
     save_json(physicians, DATA_DIR / "physicians.json")
 
-    # Stage 3: Find practice colleagues
+    # Stage 3: Find practice colleagues (CMS DB + concurrent NPPES)
     print("\n" + "=" * 60)
     print("STAGE 3: Find practice colleagues")
     print("=" * 60)
-    colleagues = find_practice_colleagues_run(physicians, state=args.state)
+    colleagues = find_practice_colleagues_run(physicians, state=args.state, cms_db=cms_db)
     save_json(colleagues, DATA_DIR / "practice_colleagues.json")
 
-    # Stage 4: Find by procedure volume
+    # Stage 4: Find by procedure volume (DuckDB query)
     print("\n" + "=" * 60)
     print("STAGE 4: Find by procedure volume")
     print("=" * 60)
@@ -69,6 +91,7 @@ def main():
         state=args.state,
         city=args.city,
         published_npis=published_npis,
+        cms_db=cms_db,
     )
     save_json(procedure_physicians, DATA_DIR / "procedure_physicians.json")
 

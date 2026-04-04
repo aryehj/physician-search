@@ -6,15 +6,15 @@
 Search PubMed for piriformis-related publications across 11 query terms. Extract all authors and affiliations from 702 articles, deduplicated to 2,647 unique authors. Output: `data/authors.json`, `data/articles.json`.
 
 ### 2. NPI lookup
-Query the NPPES registry for US-based authors. Match against relevant specialty taxonomy codes (PM&R, pain medicine, neurology, orthopedic surgery, neurosurgery, anesthesiology/pain). Output: `data/physicians.csv`, `data/physicians.json` — 1,904 records, 306 with relevant specialties.
+Match authors to NPIs using CMS DuckDB for fast name lookup, falling back to concurrent NPPES API queries for misses. Filters to relevant specialty taxonomy codes (PM&R, pain medicine, neurology, orthopedic surgery, neurosurgery, anesthesiology/pain). Output: `data/physicians.csv`, `data/physicians.json` — 1,904 records, 306 with relevant specialties.
 
-### 4. Procedure-volume pipeline (CMS Medicare data)
-Find physicians who *perform* piriformis-relevant procedures at high volume, independent of publication history. Auto-discovers and downloads CMS Medicare Provider Utilization and Payment Data, scans ~10M rows, filters to relevant HCPCS codes (27096 piriformis/sacroiliac injection weighted 10x; trigger point, nerve conduction, fluoroscopic guidance codes weighted 1-2x), ranks by weighted score. Optionally filters by state/city. Enriches via NPPES. Cross-references against Pipeline A published authors (`also_published` flag). Output: `data/procedure_physicians.json`, `data/procedure_physicians.csv`.
+### 4. Procedure-volume pipeline (CMS Medicare data via DuckDB)
+Find physicians who *perform* piriformis-relevant procedures at high volume, independent of publication history. CMS Medicare Provider Utilization data is downloaded once and imported into a DuckDB database (`data/cms/cms.duckdb`); procedure volume queries run in milliseconds via SQL. Filters to relevant HCPCS codes (27096 piriformis/sacroiliac injection weighted 10x; trigger point, nerve conduction, fluoroscopic guidance codes weighted 1-2x), ranks by weighted score. Optionally filters by state/city. Enriches via concurrent NPPES. Cross-references against Pipeline A published authors (`also_published` flag). Output: `data/procedure_physicians.json`, `data/procedure_physicians.csv`.
 
 This addresses the core limitation of Pipeline A: competent treating physicians who never publish are now discoverable.
 
-### 5. Practice-colleague discovery (NPPES address matching)
-Find physicians who share a practice location with known published piriformis experts. Takes seed physicians from Pipeline A, extracts their practice zip codes, queries NPPES for all relevant-specialty providers in those zips, and matches on normalized street address. Three confidence tiers: same address (36 high-confidence finds), same address at a probable hospital campus (361), and same zip + relevant specialty (1,967, noisier). Output: `data/practice_colleagues.json`, `data/practice_colleagues.csv`.
+### 5. Practice-colleague discovery (CMS DuckDB + NPPES address matching)
+Find physicians who share a practice location with known published piriformis experts. Takes seed physicians from Pipeline A, extracts their practice zip codes, uses CMS DuckDB for fast zip+specialty provider discovery, then fetches street addresses via concurrent NPPES queries for address matching. Three confidence tiers: same address (36 high-confidence finds), same address at a probable hospital campus (361), and same zip + relevant specialty (1,967, noisier). Output: `data/practice_colleagues.json`, `data/practice_colleagues.csv`.
 
 Partially addresses the gap noted in Open Problem 6: physicians who work alongside publishing experts but don't publish themselves are now discoverable.
 

@@ -53,3 +53,29 @@ The `fore_name`/`first_name` field name mismatch between merge_and_rank output a
 - Stages 3 and 4 are independent and could be parallelized in a future optimization, but run sequentially for now.
 - The ranked_physicians.json file is only written once (after Stage 7), not after the initial Stage 5 merge.
 - The `fore_name` workaround is a known schema debt item tracked for Phase 3.
+
+## ADR-003: DuckDB for CMS data, concurrent NPPES queries
+
+**Date:** 2026-04-04
+**Status:** Accepted
+
+### Context
+
+The pipeline had three performance bottlenecks: Stage 2 made ~1,000 serial NPPES API calls (~5 min), Stage 3 made dozens of serial NPPES zip+taxonomy queries (~2-3 min), and Stage 4 downloaded and scanned a ~300 MB CSV with ~10M rows in Python (~10 min). The CMS CSV and NPPES API return overlapping data (NPI, name, specialty, location), but each stage queried independently.
+
+### Decision
+
+1. **DuckDB as shared data store.** The CMS CSV is imported once into a DuckDB database (`data/cms/cms.duckdb`, ~50-80 MB compressed). A new shared module `scripts/cms_db.py` manages download, import, indexing, and provides query methods (`lookup_by_name`, `providers_in_zip`, `procedure_volume`). Stages 2, 3, and 4 all query this database instead of scanning CSV or making redundant API calls.
+
+2. **Concurrent async NPPES queries.** All remaining NPPES API calls use `httpx.AsyncClient` with an `asyncio.Semaphore(10)` for concurrency control. A shared `batch_nppes()` function in `cms_db.py` handles this. NPPES is used as a fallback for authors not in CMS (Stage 2) and for street addresses not available in CMS data (Stage 3).
+
+3. **Shared constants.** `RELEVANT_TAXONOMIES`, `RELEVANT_CMS_SPECIALTIES`, `TARGET_HCPCS`, and `TAXONOMY_SEARCH_TERMS` are defined once in `cms_db.py` and imported by other scripts, eliminating prior duplication.
+
+4. **`--refresh-cms` flag.** Controls when the DuckDB database is rebuilt. Without it, the existing database is reused. The CMS CSV filename includes the data year, so new years get new downloads automatically; `--refresh-cms` forces a full rebuild.
+
+### Consequences
+
+- Stage 2 drops from ~5 min to ~30 sec, Stage 3 from ~2-3 min to ~30 sec, Stage 4 from ~10 min to ~1 sec. First run adds ~1-2 min for one-time CSV→DuckDB import.
+- CMS data only covers Medicare billers. Younger physicians or those in purely private-pay practices won't appear in CMS lookups. The NPPES fallback in Stage 2 handles this, but CMS-matched physicians from Stage 2 lack street addresses (CMS only has city/state/zip). This reduces Stage 3's ability to do high-confidence address matching for those seeds.
+- `duckdb` is now a required dependency for all pipeline scripts (added to inline `uv` metadata).
+- The DuckDB file is ~50-80 MB vs ~300 MB for the raw CSV. Both are gitignored under `data/cms/`.
