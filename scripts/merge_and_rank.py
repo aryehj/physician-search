@@ -75,7 +75,13 @@ def empty_record(npi: str) -> dict:
     }
 
 
-NPI_QUALITY_RANK = {"relevant_specialty": 0, "name_only": 1, "none": 2}
+NPI_QUALITY_RANK = {
+    "affiliation_verified": 0,
+    "relevant_specialty": 1,
+    "state_match": 2,
+    "name_only": 3,
+    "none": 4,
+}
 
 
 def build_merged_index(physicians, in_network, procedures, colleagues):
@@ -113,7 +119,7 @@ def build_merged_index(physicians, in_network, procedures, colleagues):
             rec["npi_match_quality"] = quality
             rec["article_count"] = p.get("article_count", 0)
             rec["pmids"] = p.get("pmids", [])
-            rec["is_relevant_specialty"] = quality == "relevant_specialty"
+            rec["is_relevant_specialty"] = quality in ("relevant_specialty", "affiliation_verified")
             rec["sources"].append("publication")
             # Address from Pipeline A
             if p.get("practice_city"):
@@ -285,7 +291,11 @@ def compute_score(rec: dict) -> tuple[float, list[str]]:
         reasons.append("same zip as expert")
 
     # NPI match quality bonus
-    if rec.get("npi_match_quality") == "relevant_specialty":
+    npi_quality = rec.get("npi_match_quality")
+    if npi_quality == "affiliation_verified":
+        score += WEIGHTS["npi_match_relevant"] + 3.0
+        reasons.append("NPI + affiliation verified")
+    elif npi_quality == "relevant_specialty":
         score += WEIGHTS["npi_match_relevant"]
         reasons.append("NPI confirmed relevant specialty")
 
