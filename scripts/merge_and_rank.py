@@ -23,9 +23,9 @@ DATA_DIR = Path("data")
 
 # Scoring weights
 WEIGHTS = {
-    "piriformis_27096_per_service": 0.6,   # per service, capped at 50 services
-    "other_procedure_score_factor": 0.05,  # per weighted point, capped at 200
-    "article_count_per_pub": 3.0,          # per publication, capped at 10
+    "procedure_score_factor": 0.1,         # per weighted point, capped at 300
+    "published_author_base": 10.0,         # bonus for any publications
+    "article_count_per_pub": 5.0,          # per publication, capped at 10
     "relevant_specialty": 10.0,
     "in_anthem_network": 15.0,
     "accepting_new_patients": 5.0,
@@ -33,6 +33,9 @@ WEIGHTS = {
     "colleague_hospital": 3.0,
     "colleague_zip_only": 1.0,
     "npi_match_relevant": 5.0,
+    "combo_published_and_procedures": 15.0,  # publishes AND does the procedures
+    "combo_two_sources": 5.0,               # any 2 pipelines
+    "combo_three_sources": 10.0,            # all 3 pipelines
 }
 
 
@@ -72,6 +75,73 @@ def empty_record(npi: str) -> dict:
         "colleague_match_type": None,
         "colleague_match_confidence": None,
         "sources": [],
+    }
+
+
+_COLLEAGUE_LABELS = {
+    "high": "Same address",
+    "low_hospital_campus": "Hospital campus",
+    "low_zip_only": "Same ZIP",
+}
+
+_NPI_MATCH_LABELS = {
+    "affiliation_verified": "Affiliation verified",
+    "relevant_specialty": "Relevant specialty",
+    "state_match": "State match",
+    "name_only": "Name only",
+}
+
+CSV_HEADERS = [
+    "Rank", "NPI", "Name", "Credential", "Specialty",
+    "City", "State", "ZIP", "Address",
+    "Score", "Publications", "Procedure Score",
+    "In Network", "New Patients", "Networks",
+    "Colleague", "NPI Match", "Combo Bonus", "Sources",
+]
+
+
+def format_csv_row(rec: dict) -> dict:
+    """Transform a ranked record into a human-readable CSV row."""
+    # Derive combo bonus from structured data (not reason strings)
+    sources = set(rec.get("sources", []))
+    has_pubs = "publication" in sources and rec.get("article_count", 0) > 0
+    has_procs = "procedure" in sources and rec.get("weighted_procedure_score", 0) > 0
+    combo_parts = []
+    if has_pubs and has_procs:
+        combo_parts.append("published + procedures")
+    if len(sources) >= 3:
+        combo_parts.append("all 3 pipelines")
+    elif len(sources) >= 2:
+        combo_parts.append(f"{len(sources)} pipelines")
+
+    return {
+        "Rank": rec.get("rank", ""),
+        "NPI": rec.get("npi", ""),
+        "Name": rec.get("name", ""),
+        "Credential": rec.get("credential", ""),
+        "Specialty": rec.get("specialty", ""),
+        "City": rec.get("city", ""),
+        "State": rec.get("state", ""),
+        "ZIP": rec.get("zip", ""),
+        "Address": rec.get("address", ""),
+        "Score": rec.get("score", ""),
+        "Publications": rec.get("article_count", 0) or "",
+        "Procedure Score": int(rec.get("weighted_procedure_score", 0)) or "",
+        "In Network": "Yes" if rec.get("in_anthem_network") else "No",
+        "New Patients": (
+            "Yes" if rec.get("accepting_new_patients") is True
+            else "No" if rec.get("accepting_new_patients") is False
+            else ""
+        ),
+        "Networks": "; ".join(rec.get("anthem_networks", [])),
+        "Colleague": _COLLEAGUE_LABELS.get(
+            rec.get("colleague_match_confidence", ""), ""
+        ),
+        "NPI Match": _NPI_MATCH_LABELS.get(
+            rec.get("npi_match_quality", ""), ""
+        ),
+        "Combo Bonus": "; ".join(combo_parts),
+        "Sources": ", ".join(rec.get("sources", [])),
     }
 
 
@@ -230,7 +300,7 @@ def rank_sort_key(r: dict) -> tuple:
     """Sort key for ranked physician records: score desc, then tie-breakers."""
     return (
         -r["score"],
-        -r.get("piriformis_injection_services", 0),
+        -r.get("weighted_procedure_score", 0),
         -r.get("article_count", 0),
         r.get("last_name", ""),
     )
@@ -241,24 +311,17 @@ def compute_score(rec: dict) -> tuple[float, list[str]]:
     score = 0.0
     reasons = []
 
-    # 27096 piriformis injection services
-    svc_27096 = rec.get("piriformis_injection_services", 0)
-    if svc_27096 > 0:
-        pts = min(svc_27096, 50) * WEIGHTS["piriformis_27096_per_service"]
-        score += pts
-        reasons.append(f"{svc_27096} piriformis injections (27096)")
-
-    # Other procedure volume (subtract 27096 contribution from weighted score)
+    # Relevant procedure volume
     total_proc = rec.get("weighted_procedure_score", 0)
-    other_proc = total_proc - (svc_27096 * 10)  # 27096 has weight 10
-    if other_proc > 0:
-        pts = min(other_proc, 200) * WEIGHTS["other_procedure_score_factor"]
+    if total_proc > 0:
+        pts = min(total_proc, 300) * WEIGHTS["procedure_score_factor"]
         score += pts
         reasons.append(f"procedure score {total_proc:.0f}")
 
     # Publications
     arts = rec.get("article_count", 0)
     if arts > 0:
+        score += WEIGHTS["published_author_base"]
         pts = min(arts, 10) * WEIGHTS["article_count_per_pub"]
         score += pts
         reasons.append(f"{arts} publication(s)")
@@ -298,6 +361,22 @@ def compute_score(rec: dict) -> tuple[float, list[str]]:
     elif npi_quality == "relevant_specialty":
         score += WEIGHTS["npi_match_relevant"]
         reasons.append("NPI confirmed relevant specialty")
+
+    # Combination bonuses (multi-pipeline corroboration)
+    sources = set(rec.get("sources", []))
+    has_pubs = "publication" in sources and rec.get("article_count", 0) > 0
+    has_procs = "procedure" in sources and rec.get("weighted_procedure_score", 0) > 0
+
+    if has_pubs and has_procs:
+        score += WEIGHTS["combo_published_and_procedures"]
+        reasons.append("published + procedures")
+
+    if len(sources) >= 3:
+        score += WEIGHTS["combo_three_sources"]
+        reasons.append("found by all 3 pipelines")
+    elif len(sources) >= 2:
+        score += WEIGHTS["combo_two_sources"]
+        reasons.append(f"found by {len(sources)} pipelines")
 
     return score, reasons
 
@@ -482,26 +561,12 @@ def main():
     print(f"\nWrote {out_json}")
 
     # Save CSV
-    csv_fields = [
-        "rank", "npi", "name", "credential", "specialty",
-        "city", "state", "zip", "address",
-        "score", "reasons",
-        "article_count", "in_anthem_network", "accepting_new_patients",
-        "anthem_networks",
-        "weighted_procedure_score", "piriformis_injection_services",
-        "colleague_match_confidence", "colleague_match_type",
-        "sources",
-    ]
     out_csv = DATA_DIR / "ranked_physicians.csv"
     with open(out_csv, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=csv_fields, extrasaction="ignore")
+        writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
         writer.writeheader()
         for rec in records:
-            row = dict(rec)
-            row["reasons"] = "; ".join(rec.get("reasons", []))
-            row["anthem_networks"] = "; ".join(rec.get("anthem_networks", []))
-            row["sources"] = ", ".join(rec.get("sources", []))
-            writer.writerow(row)
+            writer.writerow(format_csv_row(rec))
     print(f"Wrote {out_csv}")
 
 

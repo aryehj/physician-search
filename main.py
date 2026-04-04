@@ -16,7 +16,7 @@ from lookup_npis import run as lookup_npis_run
 from find_practice_colleagues import run as find_practice_colleagues_run
 from find_by_procedures import run as find_by_procedures_run
 from merge_and_rank import run as merge_and_rank_run
-from merge_and_rank import compute_score, rank_sort_key
+from merge_and_rank import compute_score, rank_sort_key, CSV_HEADERS, format_csv_row
 from check_anthem_network import run as check_anthem_network_run
 from cms_db import CmsDb
 
@@ -156,25 +156,12 @@ def _run_pipeline(args, cms_db):
 
     save_json(ranked, DATA_DIR / "ranked_physicians.json")
 
-    csv_fields = [
-        "rank", "npi", "name", "credential", "specialty",
-        "city", "state", "zip", "address",
-        "score", "reasons",
-        "article_count", "in_anthem_network", "accepting_new_patients",
-        "anthem_networks",
-        "procedure_score",
-        "colleague_match_confidence", "colleague_match_type",
-        "sources",
-    ]
     out_csv = DATA_DIR / "ranked_physicians.csv"
     with open(out_csv, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=csv_fields, extrasaction="ignore")
+        writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
         writer.writeheader()
         for rec in ranked:
-            row = dict(rec)
-            row["reasons"] = "; ".join(rec.get("reasons", []))
-            row["anthem_networks"] = "; ".join(rec.get("anthem_networks", []))
-            writer.writerow(row)
+            writer.writerow(format_csv_row(rec))
     print(f"  Saved {out_csv} ({len(ranked)} records)")
 
     # Summary

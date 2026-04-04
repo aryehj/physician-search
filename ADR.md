@@ -113,3 +113,27 @@ Introduced a new match quality tier `affiliation_verified` (highest confidence) 
 - Authors with affiliations in multiple US states match providers in any of those states.
 - The country detection list (~40 entries) is not exhaustive; obscure country names may slip through as `no_conflict` rather than `state_mismatch`. This is acceptable — false negatives (missing a valid match) are less harmful than false positives (wrong person).
 - The `affiliation_verified` quality level is the new highest tier in `NPI_QUALITY_RANK`, above `relevant_specialty`.
+
+## ADR-005: Generic procedure scoring in ranking layer
+
+**Date:** 2026-04-04
+**Status:** Accepted
+
+### Context
+
+The merge_and_rank scoring had a piriformis-specific weight (`piriformis_27096_per_service: 0.6`, capped at 50 services) separate from other procedures (`other_procedure_score_factor: 0.05`). This hardcoded condition-specific knowledge into the ranking layer, making the tool difficult to adapt to other medical conditions.
+
+Meanwhile, `find_by_procedures.py` already encodes condition-specific procedure weights via `TARGET_HCPCS` in `cms_db.py` (e.g., 27096 gets 10x weight, trigger point procedures get 1-2x). The weighted score it produces already reflects condition-specific relevance.
+
+### Decision
+
+Replaced the two-part piriformis-specific scoring with a single generic `procedure_score_factor: 0.1` (per weighted point, capped at 300). The ranking layer now consumes `weighted_procedure_score` as an opaque number — all condition-specific weighting lives in `TARGET_HCPCS` in `cms_db.py`.
+
+Also increased publication weights (base bonus of 10 pts for any publications, 5 pts/pub up from 3) and added multi-pipeline combination bonuses (published + procedures = +15, any 2 sources = +5, all 3 = +10).
+
+### Consequences
+
+- To adapt the tool to a different condition, only `cms_db.py` constants (search terms, HCPCS codes, taxonomy codes) need to change. The ranking layer works generically.
+- The `piriformis_injection_services` field remains in the data records for reference but is no longer used in scoring.
+- Published authors now reliably outrank non-published providers when other signals are similar (1 pub = 15 pts vs. relevant_specialty = 10 pts).
+- Multi-pipeline corroboration is explicitly rewarded: a provider who publishes AND does high-volume procedures scores 20-25 points higher than the sum of those signals in isolation.

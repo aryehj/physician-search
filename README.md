@@ -29,7 +29,7 @@ Outputs land in `data/`:
 - `in_network_physicians.csv` / `in_network_physicians.json` — Cook County physicians found in Anthem's provider directory
 - `procedure_physicians.csv` / `procedure_physicians.json` — physicians ranked by weighted procedure volume, with `also_published` flag for overlap with Pipeline A
 - `practice_colleagues.csv` / `practice_colleagues.json` — physicians at the same practice locations as published experts, with `match_type` and `match_confidence` fields
-- `ranked_physicians.csv` / `ranked_physicians.json` — final merged and ranked output across all pipelines, with composite scores and in-network status
+- `ranked_physicians.csv` / `ranked_physicians.json` — final merged and ranked output across all pipelines, with composite scores, in-network status, and multi-pipeline combination bonuses. CSV uses human-readable headers (Publications, Procedure Score, In Network, Colleague, Combo Bonus, etc.) with atomic columns instead of a reasons blob
 
 ## Usage
 
