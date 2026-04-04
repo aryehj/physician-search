@@ -220,6 +220,16 @@ def build_merged_index(physicians, in_network, procedures, colleagues):
     return index
 
 
+def rank_sort_key(r: dict) -> tuple:
+    """Sort key for ranked physician records: score desc, then tie-breakers."""
+    return (
+        -r["score"],
+        -r.get("piriformis_injection_services", 0),
+        -r.get("article_count", 0),
+        r.get("last_name", ""),
+    )
+
+
 def compute_score(rec: dict) -> tuple[float, list[str]]:
     """Compute composite score and human-readable reasons."""
     score = 0.0
@@ -282,22 +292,28 @@ def compute_score(rec: dict) -> tuple[float, list[str]]:
     return score, reasons
 
 
-def apply_filters(records: list[dict], args) -> list[dict]:
+def apply_filters(
+    records: list[dict],
+    state: str | None = None,
+    city: str | None = None,
+    min_score: float = 0.0,
+    top: int | None = None,
+    in_network_only: bool = False,
+    exclude_zip_only: bool = False,
+) -> list[dict]:
     """Apply geographic and threshold filters."""
     filtered = records
 
-    if args.state:
-        state = args.state.upper()
-        filtered = [r for r in filtered if r.get("state", "").upper() == state]
+    if state:
+        filtered = [r for r in filtered if r.get("state", "").upper() == state.upper()]
 
-    if args.city:
-        city = args.city.lower()
-        filtered = [r for r in filtered if r.get("city", "").lower() == city]
+    if city:
+        filtered = [r for r in filtered if r.get("city", "").lower() == city.lower()]
 
-    if args.in_network_only:
+    if in_network_only:
         filtered = [r for r in filtered if r.get("in_anthem_network")]
 
-    if args.exclude_zip_only:
+    if exclude_zip_only:
         filtered = [
             r for r in filtered
             if r.get("colleague_match_confidence") != "low_zip_only"
@@ -305,11 +321,11 @@ def apply_filters(records: list[dict], args) -> list[dict]:
             or r.get("colleague_match_confidence") is None
         ]
 
-    if args.min_score > 0:
-        filtered = [r for r in filtered if r["score"] >= args.min_score]
+    if min_score > 0:
+        filtered = [r for r in filtered if r["score"] >= min_score]
 
-    if args.top:
-        filtered = filtered[: args.top]
+    if top:
+        filtered = filtered[:top]
 
     return filtered
 
@@ -342,6 +358,73 @@ def print_summary(records: list[dict], max_rows: int = 30):
         print(f"\n  ... and {len(records) - max_rows} more (see ranked_physicians.json)")
 
 
+def run(
+    physicians: list[dict],
+    in_network: list[dict],
+    procedures: list[dict],
+    colleagues: list[dict],
+    state: str | None = None,
+    city: str | None = None,
+    min_score: float = 1.0,
+    top: int | None = None,
+    in_network_only: bool = False,
+    exclude_zip_only: bool = False,
+) -> list[dict]:
+    """Merge pipelines and produce ranked list. Returns ranked records."""
+    print("\nMerging on NPI...")
+    index = build_merged_index(physicians, in_network, procedures, colleagues)
+    print(f"  {len(index)} unique NPIs")
+
+    # Score all records
+    for rec in index.values():
+        score, reasons = compute_score(rec)
+        rec["score"] = round(score, 1)
+        rec["reasons"] = reasons
+
+    # Sort by score descending, then tie-breakers
+    records = sorted(index.values(), key=rank_sort_key)
+
+    # Apply filters
+    records = apply_filters(
+        records,
+        state=state,
+        city=city,
+        min_score=min_score,
+        top=top,
+        in_network_only=in_network_only,
+        exclude_zip_only=exclude_zip_only,
+    )
+
+    # Assign ranks after filtering
+    for i, rec in enumerate(records, 1):
+        rec["rank"] = i
+
+    # Build display name
+    for rec in records:
+        rec["name"] = f"{rec['last_name']}, {rec['first_name']}"
+
+    filters_desc = []
+    if state:
+        filters_desc.append(f"state={state}")
+    if city:
+        filters_desc.append(f"city={city}")
+    if in_network_only:
+        filters_desc.append("in-network only")
+    if exclude_zip_only:
+        filters_desc.append("excluding zip-only")
+    if min_score > 0:
+        filters_desc.append(f"score>={min_score}")
+    if top:
+        filters_desc.append(f"top {top}")
+
+    print(f"\n{len(records)} providers after filtering"
+          + (f" ({', '.join(filters_desc)})" if filters_desc else ""))
+
+    print_summary(records)
+
+    return records
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Merge physician pipelines and produce a ranked call list."
@@ -372,51 +455,15 @@ def main():
     procedures = load_json(DATA_DIR / "procedure_physicians.json")
     colleagues = load_json(DATA_DIR / "practice_colleagues.json")
 
-    print("\nMerging on NPI...")
-    index = build_merged_index(physicians, in_network, procedures, colleagues)
-    print(f"  {len(index)} unique NPIs")
-
-    # Score all records
-    for rec in index.values():
-        score, reasons = compute_score(rec)
-        rec["score"] = round(score, 1)
-        rec["reasons"] = reasons
-
-    # Sort by score descending, then tie-breakers
-    records = sorted(index.values(), key=lambda r: (
-        -r["score"],
-        -r.get("piriformis_injection_services", 0),
-        -r.get("article_count", 0),
-        r.get("last_name", ""),
-    ))
-
-    # Apply filters
-    records = apply_filters(records, args)
-
-    # Assign ranks after filtering
-    for i, rec in enumerate(records, 1):
-        rec["rank"] = i
-
-    # Build display name
-    for rec in records:
-        rec["name"] = f"{rec['last_name']}, {rec['first_name']}"
-
-    filters_desc = []
-    if args.state:
-        filters_desc.append(f"state={args.state}")
-    if args.city:
-        filters_desc.append(f"city={args.city}")
-    if args.in_network_only:
-        filters_desc.append("in-network only")
-    if args.exclude_zip_only:
-        filters_desc.append("excluding zip-only")
-    if args.min_score > 0:
-        filters_desc.append(f"score>={args.min_score}")
-    if args.top:
-        filters_desc.append(f"top {args.top}")
-
-    print(f"\n{len(records)} providers after filtering"
-          + (f" ({', '.join(filters_desc)})" if filters_desc else ""))
+    records = run(
+        physicians, in_network, procedures, colleagues,
+        state=args.state,
+        city=args.city,
+        min_score=args.min_score,
+        top=args.top,
+        in_network_only=args.in_network_only,
+        exclude_zip_only=args.exclude_zip_only,
+    )
 
     # Save JSON
     out_json = DATA_DIR / "ranked_physicians.json"
@@ -446,9 +493,6 @@ def main():
             row["sources"] = ", ".join(rec.get("sources", []))
             writer.writerow(row)
     print(f"Wrote {out_csv}")
-
-    # Console summary
-    print_summary(records)
 
 
 if __name__ == "__main__":

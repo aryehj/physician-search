@@ -154,48 +154,30 @@ def parse_provider(r: dict) -> dict:
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Find physicians at the same practice locations as known piriformis experts."
-    )
-    parser.add_argument("--state", help="Filter seed physicians by state (e.g. IL)")
-    parser.add_argument(
-        "--match-type", choices=["address", "zip", "both"], default="both",
-        help="Match type to include: address (same street), zip (same zip+specialty), or both (default)"
-    )
-    parser.add_argument(
-        "--hospital-threshold", type=int, default=20,
-        help="Providers at one address before flagging as hospital campus (default: 20)"
-    )
-    args = parser.parse_args()
-
-    data_dir = Path("data")
-    physicians_path = data_dir / "physicians.json"
-
-    if not physicians_path.exists():
-        print("Error: data/physicians.json not found. Run lookup_npis.py first.")
-        sys.exit(1)
-
-    with open(physicians_path) as f:
-        all_physicians = json.load(f)
-
+def run(
+    physicians: list[dict],
+    state: str | None = None,
+    match_type: str = "both",
+    hospital_threshold: int = 20,
+) -> list[dict]:
+    """Find practice colleagues of seed physicians. Returns colleague list."""
     # Seed = relevant-specialty physicians with a known NPI and practice address
     seeds = [
-        p for p in all_physicians
+        p for p in physicians
         if p.get("npi_match_quality") == "relevant_specialty"
         and p.get("npi")
         and p.get("practice_address")
     ]
 
-    if args.state:
-        seeds = [p for p in seeds if p.get("practice_state", "").upper() == args.state.upper()]
-        print(f"Loaded {len(seeds)} seed physicians in {args.state.upper()}")
+    if state:
+        seeds = [p for p in seeds if p.get("practice_state", "").upper() == state.upper()]
+        print(f"Loaded {len(seeds)} seed physicians in {state.upper()}")
     else:
         print(f"Loaded {len(seeds)} seed physicians with relevant specialties")
 
     if not seeds:
         print("No seed physicians found.")
-        sys.exit(1)
+        return []
 
     seed_npis = {p["npi"] for p in seeds}
 
@@ -245,10 +227,10 @@ def main():
                     addr_counts[norm] += 1
             hospital_addresses = {
                 addr for addr, count in addr_counts.items()
-                if count >= args.hospital_threshold
+                if count >= hospital_threshold
             }
             if hospital_addresses:
-                print(f"  Flagged {len(hospital_addresses)} hospital-campus address(es) (>= {args.hospital_threshold} providers)")
+                print(f"  Flagged {len(hospital_addresses)} hospital-campus address(es) (>= {hospital_threshold} providers)")
 
             # Match each new relevant-specialty provider against seed addresses
             for npi, provider in new_providers.items():
@@ -267,14 +249,14 @@ def main():
                 ]
 
                 if matching_seed_npis:
-                    if args.match_type == "zip":
+                    if match_type == "zip":
                         continue  # address matches excluded in zip-only mode
-                    match_type = "same_address_hospital_campus" if is_hospital else "same_address"
+                    match_type_val = "same_address_hospital_campus" if is_hospital else "same_address"
                     match_confidence = "low_hospital_campus" if is_hospital else "high"
                 else:
-                    if args.match_type == "address":
+                    if match_type == "address":
                         continue  # zip-only matches excluded in address-only mode
-                    match_type = "same_zip_specialty"
+                    match_type_val = "same_zip_specialty"
                     match_confidence = "low_zip_only"
                     matching_seed_npis = [e["seed_npi"] for e in seed_entries]
 
@@ -286,7 +268,7 @@ def main():
                             existing["colleague_of"].append(s)
                     rank = {"high": 0, "low_hospital_campus": 1, "low_zip_only": 2}
                     if rank.get(match_confidence, 9) < rank.get(existing["match_confidence"], 9):
-                        existing["match_type"] = match_type
+                        existing["match_type"] = match_type_val
                         existing["match_confidence"] = match_confidence
                 else:
                     colleagues[npi] = {
@@ -300,7 +282,7 @@ def main():
                         "practice_state": pa.get("state", ""),
                         "practice_zip": pa.get("postal_code", ""),
                         "colleague_of": list(matching_seed_npis),
-                        "match_type": match_type,
+                        "match_type": match_type_val,
                         "match_confidence": match_confidence,
                     }
 
@@ -320,6 +302,53 @@ def main():
     print(f"  Same zip + specialty:        {n_zip}")
     print(f"  Total:                       {len(results)}")
 
+    high = [r for r in results if r["match_confidence"] == "high"]
+    if high:
+        print(f"\n=== High-confidence matches ({len(high)}) ===")
+        for r in high[:20]:
+            loc = f"{r['practice_address_1']}, {r['practice_city']}, {r['practice_state']}"
+            print(f"  {r['first_name']} {r['last_name']}, {r['credential'] or '?'} — {r['specialty']} — {loc}")
+        if len(high) > 20:
+            print(f"  ... and {len(high) - 20} more")
+
+    return results
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Find physicians at the same practice locations as known piriformis experts."
+    )
+    parser.add_argument("--state", help="Filter seed physicians by state (e.g. IL)")
+    parser.add_argument(
+        "--match-type", choices=["address", "zip", "both"], default="both",
+        help="Match type to include: address (same street), zip (same zip+specialty), or both (default)"
+    )
+    parser.add_argument(
+        "--hospital-threshold", type=int, default=20,
+        help="Providers at one address before flagging as hospital campus (default: 20)"
+    )
+    args = parser.parse_args()
+
+    data_dir = Path("data")
+    physicians_path = data_dir / "physicians.json"
+
+    if not physicians_path.exists():
+        print("Error: data/physicians.json not found. Run lookup_npis.py first.")
+        sys.exit(1)
+
+    with open(physicians_path) as f:
+        all_physicians = json.load(f)
+
+    results = run(
+        all_physicians,
+        state=args.state,
+        match_type=args.match_type,
+        hospital_threshold=args.hospital_threshold,
+    )
+
+    if not results:
+        sys.exit(1)
+
     json_path = data_dir / "practice_colleagues.json"
     with open(json_path, "w") as f:
         json.dump(results, f, indent=2)
@@ -338,15 +367,6 @@ def main():
             row = {**r, "colleague_of": "; ".join(r["colleague_of"])}
             writer.writerow(row)
     print(f"Saved {csv_path}")
-
-    high = [r for r in results if r["match_confidence"] == "high"]
-    if high:
-        print(f"\n=== High-confidence matches ({len(high)}) ===")
-        for r in high[:20]:
-            loc = f"{r['practice_address_1']}, {r['practice_city']}, {r['practice_state']}"
-            print(f"  {r['first_name']} {r['last_name']}, {r['credential'] or '?'} — {r['specialty']} — {loc}")
-        if len(high) > 20:
-            print(f"  ... and {len(high) - 20} more")
 
 
 if __name__ == "__main__":

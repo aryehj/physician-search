@@ -150,44 +150,8 @@ def get_practitioner_roles(
     return [e.get("resource", {}) for e in bundle.get("entry", [])]
 
 
-def main():
-    # Validate env vars
-    missing = []
-    for var in [
-        "ANTHEM_CLIENT_ID", "ANTHEM_CLIENT_SECRET",
-        "ANTHEM_ACCESS_TOKEN_URL", "ANTHEM_PROVIDER_DIRECTORY_URL",
-    ]:
-        if not os.environ.get(var):
-            missing.append(var)
-    if missing:
-        print(f"Error: missing environment variables: {', '.join(missing)}")
-        print("Make sure your .env file has all four Anthem credentials.")
-        sys.exit(1)
-
-    # Load physicians
-    physicians_path = DATA_DIR / "physicians.json"
-    if not physicians_path.exists():
-        print("Error: data/physicians.json not found. Run lookup_npis.py first.")
-        sys.exit(1)
-
-    with open(physicians_path) as f:
-        physicians = json.load(f)
-    print(f"Loaded {len(physicians)} physician records")
-
-    # Filter to Cook County, IL
-    cook_county = [
-        p for p in physicians
-        if p.get("practice_state") == "IL"
-        and p.get("practice_city", "").upper() in COOK_COUNTY_CITIES
-        and p.get("npi")  # must have an NPI to look up
-    ]
-    print(f"Filtered to {len(cook_county)} physicians in Cook County, IL with NPIs")
-
-    if not cook_county:
-        print("No physicians match the Cook County filter. Nothing to check.")
-        sys.exit(0)
-
-    # Authenticate with Anthem
+def run(physicians: list[dict]) -> list[dict]:
+    """Check physicians against Anthem directory. Returns enriched in-network list."""
     with httpx.Client(timeout=30.0) as client:
         print("\n=== Authenticating with Anthem ===")
         try:
@@ -196,21 +160,20 @@ def main():
         except httpx.HTTPStatusError as e:
             print(f"  Failed to get token: {e.response.status_code}")
             print(f"  Response: {e.response.text[:500]}")
-            sys.exit(1)
+            raise
         except Exception as e:
             print(f"  Failed to get token: {e}")
-            sys.exit(1)
+            raise
 
         # Check each physician against the provider directory
-        print(f"\n=== Checking {len(cook_county)} physicians against Anthem directory ===")
+        print(f"\n=== Checking {len(physicians)} physicians against Anthem directory ===")
         in_network = []
         not_found = []
-        errors = 0
 
-        for i, phys in enumerate(cook_county):
+        for i, phys in enumerate(physicians):
             name = f"{phys['fore_name']} {phys['last_name']}"
             npi = phys["npi"]
-            print(f"  [{i + 1}/{len(cook_county)}] {name} (NPI {npi})...", end=" ", flush=True)
+            print(f"  [{i + 1}/{len(physicians)}] {name} (NPI {npi})...", end=" ", flush=True)
 
             entries = search_practitioner(client, token, phys["last_name"], phys["fore_name"])
 
@@ -245,10 +208,10 @@ def main():
                         # network-reference extension
                         if "network-reference" in ext_url:
                             val = ext.get("valueReference", {})
-                            name = val.get("display", "")
+                            display_name = val.get("display", "")
                             org_id = val.get("reference", "")
-                            if name and name not in network_names:
-                                network_names.append(name)
+                            if display_name and display_name not in network_names:
+                                network_names.append(display_name)
                             if org_id and org_id not in network_org_ids:
                                 network_org_ids.append(org_id)
 
@@ -263,9 +226,9 @@ def main():
                                         accepting_patients = True
                                 if sub.get("url") == "fromNetwork":
                                     val = sub.get("valueReference", {})
-                                    name = val.get("display", "")
-                                    if name and name not in network_names:
-                                        network_names.append(name)
+                                    display_name = val.get("display", "")
+                                    if display_name and display_name not in network_names:
+                                        network_names.append(display_name)
 
                         # qualification extension — specialties
                         if "qualification" in ext_url:
@@ -310,9 +273,68 @@ def main():
 
     # Summary
     print(f"\n=== Summary ===")
-    print(f"  Cook County physicians checked: {len(cook_county)}")
-    print(f"  Found in Anthem directory:      {len(in_network)}")
-    print(f"  Not found:                      {len(not_found)}")
+    print(f"  Physicians checked:        {len(physicians)}")
+    print(f"  Found in Anthem directory: {len(in_network)}")
+    print(f"  Not found:                 {len(not_found)}")
+
+    # Print results
+    print(f"\n=== In-Network Physicians ({len(in_network)}) ===")
+    for p in sorted(in_network, key=lambda x: -x.get("article_count", 0)):
+        nets = ", ".join(p.get("anthem_networks", [])) or "network info unavailable"
+        accepting = "accepting new patients" if p.get("accepting_new_patients") else "not confirmed accepting"
+        city = p.get("practice_city") or p.get("city") or "?"
+        state = p.get("practice_state") or p.get("state") or "?"
+        name = f"{p.get('fore_name') or p.get('first_name', '')} {p['last_name']}"
+        print(
+            f"  {name}, {p.get('credential') or '?'} "
+            f"— {p.get('specialty', '?')} — {city}, {state} "
+            f"— {p.get('article_count', 0)} pub(s) — {nets} — {accepting}"
+        )
+
+    return in_network
+
+
+def main():
+    # Validate env vars
+    missing = []
+    for var in [
+        "ANTHEM_CLIENT_ID", "ANTHEM_CLIENT_SECRET",
+        "ANTHEM_ACCESS_TOKEN_URL", "ANTHEM_PROVIDER_DIRECTORY_URL",
+    ]:
+        if not os.environ.get(var):
+            missing.append(var)
+    if missing:
+        print(f"Error: missing environment variables: {', '.join(missing)}")
+        print("Make sure your .env file has all four Anthem credentials.")
+        sys.exit(1)
+
+    # Load physicians
+    physicians_path = DATA_DIR / "physicians.json"
+    if not physicians_path.exists():
+        print("Error: data/physicians.json not found. Run lookup_npis.py first.")
+        sys.exit(1)
+
+    with open(physicians_path) as f:
+        physicians = json.load(f)
+    print(f"Loaded {len(physicians)} physician records")
+
+    # Filter to Cook County, IL
+    cook_county = [
+        p for p in physicians
+        if p.get("practice_state") == "IL"
+        and p.get("practice_city", "").upper() in COOK_COUNTY_CITIES
+        and p.get("npi")  # must have an NPI to look up
+    ]
+    print(f"Filtered to {len(cook_county)} physicians in Cook County, IL with NPIs")
+
+    if not cook_county:
+        print("No physicians match the Cook County filter. Nothing to check.")
+        sys.exit(0)
+
+    try:
+        in_network = run(cook_county)
+    except Exception:
+        sys.exit(1)
 
     if not in_network:
         print("\nNo in-network physicians found. Results not saved.")
@@ -344,17 +366,6 @@ def main():
             }
             writer.writerow(row)
     print(f"Saved {csv_path}")
-
-    # Print results
-    print(f"\n=== In-Network Physicians ({len(in_network)}) ===")
-    for p in sorted(in_network, key=lambda x: -x["article_count"]):
-        nets = ", ".join(p.get("anthem_networks", [])) or "network info unavailable"
-        accepting = "accepting new patients" if p.get("accepting_new_patients") else "not confirmed accepting"
-        print(
-            f"  {p['fore_name']} {p['last_name']}, {p.get('credential') or '?'} "
-            f"— {p.get('specialty', '?')} — {p['practice_city']}, IL "
-            f"— {p['article_count']} pub(s) — {nets} — {accepting}"
-        )
 
 
 def probe(resource: str, params: dict | None = None):
