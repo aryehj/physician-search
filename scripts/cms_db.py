@@ -34,17 +34,14 @@ CMS_DATA_JSON = "https://data.cms.gov/data.json"
 # CMS specialty description strings (used for CMS data filtering)
 RELEVANT_CMS_SPECIALTIES = {
     "Physical Medicine and Rehabilitation",
-    "Pain Management",
     "Neurology",
     "Orthopedic Surgery",
     "Neurological Surgery",
-    "Anesthesiology",
     "Sports Medicine",
     "Interventional Radiology",
     "Interventional Pain Management",
     "Osteopathic Manipulative Medicine",
     "Neuromuscular Medicine",
-    "Addiction Medicine",
 }
 
 # NPPES taxonomy codes (used for NPPES API result filtering)
@@ -53,8 +50,6 @@ RELEVANT_TAXONOMIES = {
     "2081P2900X": "PM&R - Pain Medicine",
     "2081P0010X": "PM&R - Pediatric Rehab",
     "2081S0010X": "PM&R - Sports Medicine",
-    "208VP0014X": "Pain Medicine",
-    "2083P0500X": "Preventive Medicine - Pain Medicine",
     "2084N0400X": "Neurology",
     "2084N0402X": "Neurology - Neuromuscular",
     "2084P0800X": "Neurology - Pain Medicine",
@@ -63,8 +58,6 @@ RELEVANT_TAXONOMIES = {
     "207XS0114X": "Orthopaedic Surgery - Sports Medicine",
     "207XP3100X": "Orthopaedic Surgery - Pediatric",
     "207T00000X": "Neurological Surgery",
-    "207L00000X": "Anesthesiology",
-    "207LP2900X": "Anesthesiology - Pain Medicine",
     "204C00000X": "Sports Medicine",
     "2085R0001X": "Radiology - Interventional",
     "208600000X": "Surgery",
@@ -91,12 +84,10 @@ TARGET_HCPCS = {
 
 # Taxonomy description search terms for NPPES zip queries
 TAXONOMY_SEARCH_TERMS = [
-    "Pain Medicine",
     "Physical Medicine",
     "Orthopaedic",
     "Neurological Surgery",
     "Neurology",
-    "Anesthesiology",
     "Sports Medicine",
     "Interventional",
 ]
