@@ -137,3 +137,31 @@ Also increased publication weights (base bonus of 10 pts for any publications, 5
 - The `piriformis_injection_services` field remains in the data records for reference but is no longer used in scoring.
 - Published authors now reliably outrank non-published providers when other signals are similar (1 pub = 15 pts vs. relevant_specialty = 10 pts).
 - Multi-pipeline corroboration is explicitly rewarded: a provider who publishes AND does high-volume procedures scores 20-25 points higher than the sum of those signals in isolation.
+
+## ADR-006: "Published + practices" combo uses CMS presence, not specific procedure codes
+
+**Date:** 2026-04-04
+**Status:** Accepted
+
+### Context
+
+The `combo_published_and_procedures` bonus (+15 pts) required a provider to appear in both the publication pipeline AND the procedure pipeline (`find_by_procedures.py`). In practice this bonus never fired: zero NPI overlap existed between the two pipelines for piriformis syndrome. Investigation revealed the cause — published academic physicians (e.g., Nho at Rush) ARE in CMS billing data (10 rows, 80+ services), but they bill for different HCPCS codes (joint injections 20610, imaging, E&M visits) than the condition-specific `TARGET_HCPCS` codes the procedure pipeline filters on (27096, 20552, 64450, etc.).
+
+The underlying insight: a physician who publishes on a condition and actively bills Medicare with a relevant specialty is almost certainly treating that condition, regardless of which specific procedure codes appear in their claims. Requiring exact HCPCS overlap is too narrow — it misses the most credible providers.
+
+### Decision
+
+Broadened the combo trigger from "publication source AND procedure source" to "publication source AND active practitioner," where active practitioner means either:
+1. Found by the procedure pipeline with `weighted_procedure_score > 0`, OR
+2. CMS-confirmed with `npi_match_quality` of `affiliation_verified` or `relevant_specialty` (meaning the provider was matched in Medicare billing data with a relevant specialty and, for affiliation_verified, geographic consistency with their publication affiliations)
+
+Renamed the weight key from `combo_published_and_procedures` to `combo_published_and_practicing` and the reason string from "published + procedures" to "published + practices."
+
+CMS data is a single annual snapshot (no per-row dates), so "active practitioner" means "billed Medicare in the most recent data year." The `--refresh-cms` flag ensures the latest year is used.
+
+### Consequences
+
+- The combo bonus now fires for published authors confirmed in CMS (e.g., Nho: 71 → 86 pts). This matches the intuitive ranking: a physician who researches AND treats a condition should outrank one who only does one or the other.
+- Acceptable signal loss: a provider could have a relevant specialty and CMS presence without actually treating the specific condition. This is mitigated by the fact that they must also have publications on the condition — the combination of "publishes on X" + "bills Medicare as a relevant specialist" is a strong signal even without exact procedure code overlap.
+- To adapt to another condition, no changes needed in this logic — the condition-specific filtering stays in `TARGET_HCPCS` and PubMed search terms, while "practices" remains a generic CMS-presence check.
+- No recency filtering within the CMS data year is possible. A provider who billed in January but retired in December of the same data year would still qualify. The annual refresh cycle bounds the staleness to ~1-2 years.

@@ -33,7 +33,7 @@ WEIGHTS = {
     "colleague_hospital": 3.0,
     "colleague_zip_only": 1.0,
     "npi_match_relevant": 5.0,
-    "combo_published_and_procedures": 15.0,  # publishes AND does the procedures
+    "combo_published_and_practicing": 15.0,  # publishes AND actively practices
     "combo_two_sources": 5.0,               # any 2 pipelines
     "combo_three_sources": 10.0,            # all 3 pipelines
 }
@@ -105,10 +105,13 @@ def format_csv_row(rec: dict) -> dict:
     # Derive combo bonus from structured data (not reason strings)
     sources = set(rec.get("sources", []))
     has_pubs = "publication" in sources and rec.get("article_count", 0) > 0
-    has_procs = "procedure" in sources and rec.get("weighted_procedure_score", 0) > 0
+    has_practice = (
+        ("procedure" in sources and rec.get("weighted_procedure_score", 0) > 0)
+        or rec.get("npi_match_quality") in ("affiliation_verified", "relevant_specialty")
+    )
     combo_parts = []
-    if has_pubs and has_procs:
-        combo_parts.append("published + procedures")
+    if has_pubs and has_practice:
+        combo_parts.append("published + practices")
     if len(sources) >= 3:
         combo_parts.append("all 3 pipelines")
     elif len(sources) >= 2:
@@ -365,11 +368,14 @@ def compute_score(rec: dict) -> tuple[float, list[str]]:
     # Combination bonuses (multi-pipeline corroboration)
     sources = set(rec.get("sources", []))
     has_pubs = "publication" in sources and rec.get("article_count", 0) > 0
-    has_procs = "procedure" in sources and rec.get("weighted_procedure_score", 0) > 0
+    has_practice = (
+        ("procedure" in sources and rec.get("weighted_procedure_score", 0) > 0)
+        or rec.get("npi_match_quality") in ("affiliation_verified", "relevant_specialty")
+    )
 
-    if has_pubs and has_procs:
-        score += WEIGHTS["combo_published_and_procedures"]
-        reasons.append("published + procedures")
+    if has_pubs and has_practice:
+        score += WEIGHTS["combo_published_and_practicing"]
+        reasons.append("published + practices")
 
     if len(sources) >= 3:
         score += WEIGHTS["combo_three_sources"]
