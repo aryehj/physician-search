@@ -165,3 +165,23 @@ CMS data is a single annual snapshot (no per-row dates), so "active practitioner
 - Acceptable signal loss: a provider could have a relevant specialty and CMS presence without actually treating the specific condition. This is mitigated by the fact that they must also have publications on the condition — the combination of "publishes on X" + "bills Medicare as a relevant specialist" is a strong signal even without exact procedure code overlap.
 - To adapt to another condition, no changes needed in this logic — the condition-specific filtering stays in `TARGET_HCPCS` and PubMed search terms, while "practices" remains a generic CMS-presence check.
 - No recency filtering within the CMS data year is possible. A provider who billed in January but retired in December of the same data year would still qualify. The annual refresh cycle bounds the staleness to ~1-2 years.
+
+## ADR-007: Author deduplication uses full first-name token, not first initial
+
+**Date:** 2026-04-04
+**Status:** Accepted
+
+### Context
+
+Author deduplication in `fetch_authors.py` keyed on `(last_name, first_initial)`, e.g. `verma|n`. This merged any authors sharing a last name and first initial into one record, conflating different people: "Nikhil N Verma" (orthopedic surgeon at Rush University, Chicago) was merged with "Nishank Verma" (physiatrist in Chandigarh, India). The merged author inherited both PMIDs and both affiliations, so downstream NPI matching attributed the Indian publication to the US physician. Analysis found 164 such false merges across the dataset, heavily concentrated in common surnames (Chen, Kim, Lee, Park, Zhang, etc.).
+
+### Decision
+
+Changed the dedup key from `(last_name_lower, first_initial)` to `(last_name_lower, first_name_token_lower)` where `first_name_token` is the first whitespace-delimited token of the fore name. Added Unicode accent normalization (`unicodedata.normalize("NFD")` with combining-mark stripping) so legitimate variants like "Moisés"/"Moises" and "Jérome"/"Jerome" still merge correctly.
+
+### Consequences
+
+- 164 previously-merged author pairs are now correctly separated. Author count increases from ~2,648 to ~2,812.
+- Slight under-merging: an author listed as "D" on one paper and "Daniel" on another will no longer merge. This is acceptable — false separation is far less harmful than false conflation, and the initial-only case is uncommon for prolific authors.
+- Publication counts become more accurate, which improves downstream ranking (publication bonus is 10 + 5×count, so a false extra pub was worth 5 points).
+- Combined with the existing first-name compatibility check and affiliation-based geographic validation in `lookup_npis.py` (ADR-004), this provides defense in depth: dedup prevents conflation at the author level, and NPI matching prevents it at the provider level.
