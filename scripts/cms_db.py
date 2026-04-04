@@ -58,6 +58,7 @@ RELEVANT_TAXONOMIES = {
     "207XS0114X": "Orthopaedic Surgery - Sports Medicine",
     "207XP3100X": "Orthopaedic Surgery - Pediatric",
     "207T00000X": "Neurological Surgery",
+    "207LP2900X": "Anesthesiology - Pain Medicine",
     "204C00000X": "Sports Medicine",
     "2085R0001X": "Radiology - Interventional",
     "208600000X": "Surgery",
