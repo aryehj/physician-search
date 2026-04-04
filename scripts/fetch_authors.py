@@ -14,6 +14,7 @@ Usage: uv run fetch_authors.py
 
 import json
 import time
+import unicodedata
 from pathlib import Path
 
 import httpx
@@ -139,10 +140,18 @@ def parse_articles(xml_text: str) -> list[dict]:
     return articles
 
 
+def _strip_accents(s: str) -> str:
+    """Remove diacritics so 'Moisés' and 'Moises' normalize to the same key."""
+    return "".join(
+        c for c in unicodedata.normalize("NFD", s)
+        if unicodedata.category(c) != "Mn"
+    )
+
+
 def deduplicate_authors(articles: list[dict]) -> list[dict]:
     """
     Build a deduplicated author list across all articles.
-    Key by normalized (last_name, first_initial) to merge variants.
+    Key by normalized (last_name, first_name_token) to merge variants.
     Collect all known affiliations and article PMIDs per author.
     """
     author_map: dict[str, dict] = {}
@@ -154,9 +163,11 @@ def deduplicate_authors(articles: list[dict]) -> list[dict]:
             if not last:
                 continue
 
-            # Normalize key: lowercase last name + first initial
-            first_initial = fore[0].lower() if fore else ""
-            key = f"{last.lower()}|{first_initial}"
+            # Normalize key: lowercase last name + first name token
+            # Using full first token (not just initial) prevents conflating
+            # different people like "Nikhil Verma" vs "Nishank Verma"
+            first_token = _strip_accents(fore.split()[0].lower()) if fore else ""
+            key = f"{_strip_accents(last.lower())}|{first_token}"
 
             if key not in author_map:
                 author_map[key] = {
