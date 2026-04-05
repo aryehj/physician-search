@@ -6,7 +6,14 @@
 - [x] Phase 2a: Deterministic translator (arm A) — initial pass on 3-condition set
 - [x] Phase 1b: Expand gold set to 10 conditions spanning distinct axes
 - [x] Phase 2b: Re-tune arm A against the 10-condition set
-- [ ] Phase 3: Local-LLM translator (arm B) + write report
+- [x] Phase 3: Local-LLM translator (arm B) + write report → `eval/REPORT.md`
+
+**Verdict: pause and rethink.** Arm A beats all three Qwen2.5 sizes
+(0.275 vs 0.129–0.169 HCPCS F1), but both arms are stuck under the
+plan's 0.5 threshold. The keyword-overlap scoring architecture is the
+bottleneck, not the translator. See `eval/REPORT.md` for next-
+direction recommendations (dense retrieval, richer reference data,
+explicit ambiguity handling).
 
 ## Arm A baseline (10 conditions)
 
@@ -278,7 +285,11 @@ Write `eval/REPORT.md`:
 ### Testing
 
 ```bash
-# Install ollama (Mac: brew install ollama; Linux: see ollama.com/download)
+# Install ollama — uv can't do this (Ollama is a Go binary + daemon, not
+# a Python package). Use the official cross-platform installer:
+#   Linux:   curl -fsSL https://ollama.com/install.sh | sh
+#   Mac:     download from https://ollama.com/download (or brew install ollama)
+#   Windows: installer from https://ollama.com/download
 # then pull all three models
 ollama pull qwen2.5:1.5b-instruct-q4_K_M
 ollama pull qwen2.5:3b-instruct-q4_K_M

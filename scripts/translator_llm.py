@@ -71,6 +71,26 @@ Condition: tennis elbow
 
 USER_TEMPLATE = "Condition: {term}\n"
 
+# Passed to Ollama's `format` field (not just "json"). Ollama does
+# grammar-constrained decoding against this schema, so any model that
+# speaks JSON is forced to emit exactly our keys. This matters
+# especially for less strongly instruction-tuned models like
+# meditron:7b which otherwise fall back to learned JSON patterns.
+JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "aliases": {"type": "array", "items": {"type": "string"}},
+        "anatomy_keywords": {"type": "array", "items": {"type": "string"}},
+        "procedure_keywords": {"type": "array", "items": {"type": "string"}},
+        "mesh_terms": {"type": "array", "items": {"type": "string"}},
+        "specialty_hints": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "aliases", "anatomy_keywords", "procedure_keywords",
+        "mesh_terms", "specialty_hints",
+    ],
+}
+
 
 def _probe() -> None:
     try:
@@ -88,7 +108,7 @@ def _generate(model: str, term: str) -> str:
         "model": model,
         "prompt": SYSTEM_PROMPT + "\n" + USER_TEMPLATE.format(term=term),
         "stream": False,
-        "format": "json",
+        "format": JSON_SCHEMA,
         "options": {"temperature": 0.0},
     }
     r = httpx.post(
@@ -121,11 +141,19 @@ def _validate_entry(data: dict) -> dict:
         "mesh_terms",
         "specialty_hints",
     ]
+    missing = [k for k in required if k not in data]
+    if missing:
+        got = list(data.keys())
+        raise ValueError(
+            f"llm output missing required keys: {missing}. "
+            f"got keys: {got}. sample: {str(data)[:400]!r}"
+        )
     for key in required:
-        if key not in data:
-            raise ValueError(f"llm output missing required key: {key}")
         if not isinstance(data[key], list):
-            raise ValueError(f"llm output key {key!r} is not a list")
+            raise ValueError(
+                f"llm output key {key!r} is not a list: "
+                f"got {type(data[key]).__name__}={data[key]!r}"
+            )
         data[key] = [str(x).strip().lower() for x in data[key] if x]
     return data
 
