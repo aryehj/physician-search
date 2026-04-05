@@ -1,0 +1,53 @@
+{
+  "slug": "ulcer",
+  "_comments": {
+    "source": "Hand-curated 2026-04-05. AMBIGUOUS LAY TERM STRESS TEST.",
+    "ambiguity": "A patient typing 'ulcer' could mean: (a) peptic ulcer disease — gastric or duodenal, managed by GI; (b) diabetic foot ulcer — managed by podiatry, endocrinology, wound care, vascular surgery; (c) pressure ulcer / decubitus — managed by wound care, PM&R, plastic surgery; (d) venous stasis ulcer — managed by vascular surgery, dermatology; (e) corneal ulcer — ophthalmology. This gold profile commits to **peptic ulcer disease** as the canonical interpretation, since it's the most common unqualified usage ('stomach ulcer' colloquially). A translator that returns this gets credit; one that picks foot or pressure ulcer should fail loudly rather than silently picking the wrong specialty. The report should discuss what each arm does with this ambiguity.",
+    "hcpcs_rationale": "43239 EGD with biopsy is the diagnostic gold standard for peptic ulcers. 43235 diagnostic EGD without biopsy. 43255 control of bleeding EGD (active ulcer hemorrhage). 83013 H. pylori urea breath test, 87338 stool antigen, 86677 serology are the H. pylori workup codes. 99213/99214 E&M for GI follow-up.",
+    "taxonomy_rationale": "Gastroenterology (IM sub-cert and Pediatrics sub-cert) is the canonical specialty. Internal Medicine, Family Medicine, General Practice manage uncomplicated cases.",
+    "pubmed_rationale": "Core peptic-ulcer management, H. pylori eradication, NSAID-induced ulcers, bleeding ulcers, acid-suppression therapy."
+  },
+  "pubmed_queries": [
+    "peptic ulcer disease",
+    "gastric ulcer",
+    "duodenal ulcer",
+    "helicobacter pylori eradication",
+    "proton pump inhibitor ulcer",
+    "upper endoscopy peptic ulcer",
+    "nsaid induced peptic ulcer",
+    "bleeding peptic ulcer",
+    "esophagogastroduodenoscopy",
+    "h pylori treatment regimen",
+    "stress ulcer prophylaxis",
+    "peptic ulcer epidemiology"
+  ],
+  "hcpcs_weights": {
+    "43239": 10,
+    "43235": 9,
+    "43255": 7,
+    "43253": 4,
+    "43247": 3,
+    "43250": 3,
+    "83013": 8,
+    "87338": 7,
+    "86677": 5,
+    "99213": 6,
+    "99214": 7,
+    "99215": 3,
+    "99204": 4,
+    "99205": 3
+  },
+  "cms_specialties": [
+    "Gastroenterology",
+    "Internal Medicine",
+    "Family Practice",
+    "General Practice"
+  ],
+  "taxonomy_codes": [
+    "207RG0100X",
+    "207R00000X",
+    "207Q00000X",
+    "2080P0206X",
+    "208D00000X"
+  ]
+}

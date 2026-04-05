@@ -1,0 +1,50 @@
+{
+  "slug": "cataract",
+  "_comments": {
+    "source": "Hand-curated 2026-04-05. Opacification of the crystalline lens, treated surgically via phacoemulsification and IOL implantation. Specialty-narrow case: ophthalmology does essentially all of it.",
+    "hcpcs_rationale": "66984 (standard cataract w/ IOL, one-stage) is the highest-volume procedure code in all of Medicare Part B. 66982 is complex cataract (iris expander, capsular ring, etc.). 66987/66988 bundle in MIGS (laser treatment to lower IOP) for combined cataract+glaucoma surgery. 76519 is A-scan biometry (IOL power calculation). 92004/92014 are comprehensive eye exams — required pre-op evaluation. V2632 is the IOL device code.",
+    "taxonomy_rationale": "Ophthalmology is overwhelmingly the specialty. Anterior-segment / cornea sub-specialists do most of the volume. Optometry participates in co-management (pre-op refraction, post-op care) but does not perform surgery.",
+    "pubmed_rationale": "Core surgical technique names, IOL types, outcomes, and complications."
+  },
+  "pubmed_queries": [
+    "cataract surgery",
+    "phacoemulsification",
+    "intraocular lens implantation",
+    "cataract extraction",
+    "premium intraocular lens",
+    "femtosecond laser assisted cataract surgery",
+    "toric intraocular lens",
+    "multifocal intraocular lens",
+    "posterior capsular opacification",
+    "cataract surgery outcomes",
+    "cataract complications",
+    "IOL power calculation"
+  ],
+  "hcpcs_weights": {
+    "66984": 10,
+    "66982": 8,
+    "66988": 6,
+    "66987": 5,
+    "66985": 4,
+    "76519": 7,
+    "92014": 6,
+    "92012": 4,
+    "92004": 5,
+    "92002": 3,
+    "V2632": 5
+  },
+  "cms_specialties": [
+    "Ophthalmology",
+    "Optometry"
+  ],
+  "taxonomy_codes": [
+    "207W00000X",
+    "207WX0120X",
+    "207WX0009X",
+    "207WX0110X",
+    "207WX0107X",
+    "207WX0200X",
+    "152W00000X",
+    "152WC0802X"
+  ]
+}

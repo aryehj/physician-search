@@ -45,4 +45,15 @@ Some results may be name collisions (e.g., Campbell with mostly out-of-state net
 ~~Addressed by Stage 4 (procedure-volume pipeline) and practice-colleague discovery.~~ CMS claims data finds high-volume practitioners who never publish; address matching finds colleagues of those who do. Remaining gaps: physicians who perform procedures but bill under a group NPI, or whose volume falls below Medicare reporting thresholds (typically <11 services/year). Hospital "find a doctor" pages could fill this further.
 
 ### 7. Make this usable by normal people. 
-Normal people know MAYBE some words that are not medical terms of art for their diagnosis or suspicion. Maybe just symptoms. Assuming a plain language description of an actual diagnoses, someone should be able to run the full pipeline to return published authors and the whole bit. 
+Normal people know MAYBE some words that are not medical terms of art for their diagnosis or suspicion. Maybe just symptoms. Assuming a plain language description of an actual diagnoses, someone should be able to run the full pipeline to return published authors and the whole bit.
+
+### 8. Package the local-LLM translator for non-technical users
+If the plain-language-condition experiment (`plans/plain-language-condition-input.md`) concludes that arm B (local LLM) is worth productionizing, the runtime story needs to be hands-off for end users. Right now it assumes you've already `brew install ollama`'d, pulled the right model tag, started `ollama serve`, and know what `OLLAMA_MODEL` to set. That's fine for experimentation — not fine for "a patient wants to find a doctor".
+
+Things to figure out before shipping this to non-technical users:
+- **Install path.** Bundle an Ollama installer check into `main.py`, or switch to an in-process runtime (llama.cpp bindings, candle, etc.) that doesn't need a separate daemon. Ollama's advantage is cross-platform packaging; its disadvantage is the extra install step.
+- **Model distribution.** Pulling `qwen2.5:7b` is ~4.5 GB on first run. Need a clear "this will download N GB, OK?" prompt, a resumable download, and a sane default for machines with < 8 GB RAM (fall back to 1.5b or 3b automatically).
+- **Model pinning.** Tag-based pulls are not reproducible — `qwen2.5:3b-instruct-q4_K_M` could point to different weights six months from now. Pin to a digest or mirror the weights.
+- **Licensing review.** Verify the chosen model's license (Qwen, Llama, etc.) permits redistribution / commercial use for this tool's intended users.
+- **Non-Apple hardware story.** MLX is faster per watt on Apple Silicon but Apple-only. If Ollama perf is unacceptable on Apple hardware, we may end up shipping two runtimes. Decide whether that's worth it.
+- **Reference data staleness.** `scripts/reference/pfs_codes.csv` and `scripts/reference/taxonomy.csv` were vendored on 2026-04-05. CMS updates HCPCS quarterly, NUCC updates taxonomy twice a year. Add a refresh mechanism (or at minimum a staleness check that warns the user).

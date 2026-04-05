@@ -1,5 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
+# dependencies = ["duckdb", "rapidfuzz", "httpx"]
 # ///
 """
 Eval harness for plain-language condition translators.
@@ -36,7 +37,14 @@ GOLD_DIR = Path(__file__).resolve().parent / "gold"
 GOLD_TERMS = {
     "piriformis-syndrome": "piriformis syndrome",
     "tennis-elbow": "tennis elbow",
+    "carpal-tunnel-syndrome": "carpal tunnel",
+    "rotator-cuff-tear": "rotator cuff tear",
     "high-blood-pressure": "high blood pressure",
+    "type-2-diabetes": "type 2 diabetes",
+    "migraine": "migraine",
+    "cataract": "cataract",
+    "breast-cancer": "breast cancer",
+    "ulcer": "ulcer",
 }
 
 
@@ -175,10 +183,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arm", default="identity",
                         choices=["identity", "deterministic", "llm"])
+    parser.add_argument("--llm-model", default=None,
+                        help="ollama model tag (e.g. qwen2.5:3b-instruct-q4_K_M)")
     args = parser.parse_args()
 
+    arm_label = args.arm
+    if args.arm == "llm":
+        import os
+        if args.llm_model:
+            os.environ["OLLAMA_MODEL"] = args.llm_model
+        arm_label = f"llm ({os.environ.get('OLLAMA_MODEL', 'default')})"
+
     translate_fn = _load_arm(args.arm)
-    report = run_arm(translate_fn, args.arm)
+    report = run_arm(translate_fn, arm_label)
     print_report(report)
 
 

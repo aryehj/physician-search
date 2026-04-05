@@ -1,0 +1,60 @@
+{
+  "slug": "type-2-diabetes",
+  "_comments": {
+    "source": "Hand-curated 2026-04-05. Chronic, medication-managed metabolic condition. Like high-blood-pressure this stress-tests whether the procedure-volume pipeline architecture generalizes to non-procedural care — but diabetes is *slightly* more procedure-coded than HTN because of the diabetes-specific G-codes and nutrition-therapy codes.",
+    "hcpcs_rationale": "83036 HbA1c is the canonical monitoring lab (every 3-6 months). 82947 fasting glucose and 82043 urine microalbumin (nephropathy screen) are the other two monitoring-standard labs. 80053 CMP and 80061 lipid panel are baseline workup. 99213/99214 E&M dominate the visit volume. G0108/G0109 are diabetes self-management training codes unique to this condition. G0270/G0271 and 97802/97803 are medical nutrition therapy. 92250 fundus photography for retinopathy screening.",
+    "taxonomy_rationale": "Endocrinology/Diabetes & Metabolism is the formal sub-specialty. Internal Medicine, Family Medicine, and General Practice manage the majority of cases. Nephrology gets the diabetic kidney disease patients. Ophthalmology is included for retinopathy screening, Podiatry for foot care.",
+    "pubmed_rationale": "Management and monitoring queries, drug-class queries (metformin, GLP-1, insulin), and major complication queries (nephropathy, retinopathy, neuropathy, cardiovascular)."
+  },
+  "pubmed_queries": [
+    "type 2 diabetes management",
+    "diabetes hemoglobin a1c",
+    "insulin therapy type 2 diabetes",
+    "metformin type 2 diabetes",
+    "GLP-1 receptor agonists diabetes",
+    "diabetic nephropathy",
+    "diabetic retinopathy screening",
+    "diabetes self management education",
+    "glycemic control type 2 diabetes",
+    "diabetic neuropathy",
+    "diabetes cardiovascular outcomes",
+    "continuous glucose monitoring type 2 diabetes"
+  ],
+  "hcpcs_weights": {
+    "83036": 10,
+    "82947": 8,
+    "82043": 7,
+    "80053": 6,
+    "80061": 6,
+    "82570": 5,
+    "G0108": 8,
+    "G0109": 6,
+    "G0270": 4,
+    "97802": 5,
+    "97803": 4,
+    "99213": 6,
+    "99214": 8,
+    "99215": 3,
+    "99202": 2,
+    "99203": 3,
+    "99204": 4
+  },
+  "cms_specialties": [
+    "Endocrinology",
+    "Internal Medicine",
+    "Family Practice",
+    "General Practice",
+    "Nephrology",
+    "Ophthalmology",
+    "Podiatry"
+  ],
+  "taxonomy_codes": [
+    "207RE0101X",
+    "207R00000X",
+    "207Q00000X",
+    "207RN0300X",
+    "207W00000X",
+    "208D00000X",
+    "213E00000X"
+  ]
+}

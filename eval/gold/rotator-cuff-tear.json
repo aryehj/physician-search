@@ -1,0 +1,55 @@
+{
+  "slug": "rotator-cuff-tear",
+  "_comments": {
+    "source": "Hand-curated 2026-04-05. Tear of one or more of the four rotator cuff tendons (supraspinatus most common). Diagnosis via MRI/ultrasound, treatment ranges from PT/injection to arthroscopic or open repair.",
+    "hcpcs_rationale": "29827 arthroscopic rotator cuff repair is the dominant modern surgical code. 23410/23412 are open acute/chronic repair. 23420 is repair with acromioclavicular release. 29826 is subacromial decompression (often bundled). 29822/29823 are debridement codes. 20610/20611 are arthrocentesis / US-guided shoulder injection — the common non-op intervention.",
+    "taxonomy_rationale": "Orthopedic Surgery is the dominant specialty, especially Sports Medicine and Hand Surgery sub-certs. PM&R Sports and Family/IM Sports Medicine also see these patients for non-op management.",
+    "pubmed_rationale": "Procedural and diagnostic names, dominant anatomical variants (supraspinatus), common operative approaches."
+  },
+  "pubmed_queries": [
+    "rotator cuff tear",
+    "rotator cuff repair",
+    "arthroscopic rotator cuff repair",
+    "rotator cuff tendinopathy",
+    "subacromial decompression",
+    "shoulder impingement syndrome",
+    "supraspinatus tear",
+    "rotator cuff MRI diagnosis",
+    "rotator cuff surgery outcomes",
+    "rotator cuff rehabilitation",
+    "partial rotator cuff tear",
+    "massive rotator cuff tear"
+  ],
+  "hcpcs_weights": {
+    "29827": 10,
+    "23412": 9,
+    "23410": 9,
+    "23420": 8,
+    "29826": 7,
+    "29823": 5,
+    "29822": 5,
+    "20610": 5,
+    "20611": 5,
+    "29824": 3,
+    "29807": 3
+  },
+  "cms_specialties": [
+    "Orthopedic Surgery",
+    "Sports Medicine",
+    "Hand Surgery",
+    "Physical Medicine and Rehabilitation"
+  ],
+  "taxonomy_codes": [
+    "207X00000X",
+    "207XX0005X",
+    "207XS0114X",
+    "207XS0106X",
+    "207XX0801X",
+    "204C00000X",
+    "208100000X",
+    "2081S0010X",
+    "207QS0010X",
+    "207RS0010X",
+    "207PS0010X"
+  ]
+}

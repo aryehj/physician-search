@@ -1,0 +1,63 @@
+{
+  "slug": "breast-cancer",
+  "_comments": {
+    "source": "Hand-curated 2026-04-05. AMBIGUOUS LAY TERM STRESS TEST.",
+    "ambiguity": "A patient typing 'breast cancer' could reasonably be looking for: (a) screening (diagnostic radiology / mammography), (b) surgical treatment (surgical/gyn oncology, general surgery, breast surgery), (c) medical oncology (chemotherapy, targeted therapy, hormonal therapy), (d) radiation oncology, or (e) reconstructive plastic surgery after mastectomy. This gold profile commits to encoding the full multi-specialty scope — screening through reconstruction — rather than picking one stage. A good translator either returns a similarly broad profile, picks one canonical stage (most likely surgical oncology given it's the treatment front-door), or surfaces the ambiguity.",
+    "hcpcs_rationale": "Screening arm: 77067 (2D screening mammo) and 77063 (3D tomosynthesis screening). Diagnostic/biopsy: 77066/77065 diagnostic mammo, 19081/19083/19085 image-guided biopsies, 19100 core needle biopsy. Surgical: 19301 partial mastectomy/lumpectomy, 19303 simple mastectomy, 19307 modified radical mastectomy. Chemo: 96413 IV chemo admin. Radiation: 77338 IMRT device design. This spread encodes all four treatment arms.",
+    "taxonomy_rationale": "Encodes the full multi-disciplinary team: diagnostic radiology (mammo), surgical oncology, hematology & medical oncology, radiation oncology, plastic surgery (reconstruction), gynecologic oncology, and breast-imaging-focused radiology facility codes.",
+    "pubmed_rationale": "Mix of screening, surgical, medical-oncology, and radiation-oncology queries to cover the full disease arc."
+  },
+  "pubmed_queries": [
+    "breast cancer",
+    "breast cancer screening",
+    "mammography screening",
+    "breast cancer surgery",
+    "breast cancer chemotherapy",
+    "breast cancer radiation therapy",
+    "mastectomy outcomes",
+    "lumpectomy breast conserving surgery",
+    "sentinel lymph node biopsy breast cancer",
+    "HER2 positive breast cancer",
+    "triple negative breast cancer",
+    "breast cancer survival outcomes"
+  ],
+  "hcpcs_weights": {
+    "77067": 10,
+    "77063": 8,
+    "77066": 7,
+    "77065": 6,
+    "19083": 7,
+    "19081": 6,
+    "19085": 4,
+    "19100": 5,
+    "19301": 8,
+    "19303": 8,
+    "19307": 7,
+    "96413": 7,
+    "96417": 4,
+    "77338": 5,
+    "19318": 3
+  },
+  "cms_specialties": [
+    "Diagnostic Radiology",
+    "Radiation Oncology",
+    "Medical Oncology",
+    "Hematology-Oncology",
+    "Surgical Oncology",
+    "General Surgery",
+    "Plastic and Reconstructive Surgery",
+    "Gynecological Oncology",
+    "Obstetrics & Gynecology"
+  ],
+  "taxonomy_codes": [
+    "2085R0202X",
+    "2085R0001X",
+    "2085R0203X",
+    "207RX0202X",
+    "207RH0003X",
+    "2086X0206X",
+    "208200000X",
+    "207VX0201X",
+    "261QR0206X"
+  ]
+}

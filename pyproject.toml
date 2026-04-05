@@ -8,6 +8,7 @@ dependencies = [
     "lxml",
     "python-dotenv",
     "duckdb",
+    "rapidfuzz",
 ]
 
 [project.scripts]

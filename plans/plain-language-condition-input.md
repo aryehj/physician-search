@@ -2,9 +2,42 @@
 
 ## Status
 
-- [x] Phase 1: Eval harness + gold profiles
-- [ ] Phase 2: Deterministic translator (arm A)
+- [x] Phase 1: Eval harness + gold profiles (initial 3)
+- [x] Phase 2a: Deterministic translator (arm A) — initial pass on 3-condition set
+- [x] Phase 1b: Expand gold set to 10 conditions spanning distinct axes
+- [x] Phase 2b: Re-tune arm A against the 10-condition set
 - [ ] Phase 3: Local-LLM translator (arm B) + write report
+
+## Arm A baseline (10 conditions)
+
+| condition | hcpcs_f1 | taxonomy_f1 |
+|---|---|---|
+| ulcer | 0.414 | 0.320 |
+| high-blood-pressure | 0.400 | 0.385 |
+| type-2-diabetes | 0.312 | 0.296 |
+| cataract | 0.308 | 0.571 |
+| rotator-cuff-tear | 0.308 | 0.710 |
+| breast-cancer | 0.267 | 0.345 |
+| tennis-elbow | 0.231 | 0.296 |
+| piriformis-syndrome | 0.200 | 0.278 |
+| carpal-tunnel-syndrome | 0.160 | 0.545 |
+| migraine | 0.154 | 0.600 |
+| **mean** | **0.275** | **0.435** |
+
+Ceiling behaviors, for arm B to be measured against:
+- **HCPCS F1 caps at ~0.4** because consumer HCPCS descriptions don't mention condition-specific vocabulary — e.g. CPT `64721` "Release and/or relocation of hand nerve" never says "carpal" or "median", and every 20552 "Injection of trigger points" has no piriformis-specific anatomy. Set threshold change (base≥1 vs base≥3) has no effect: anatomy-matching rows already saturate top-15 for every condition.
+- **Taxonomy F1 spreads 0.28–0.71** by specialty narrowness. Narrow-specialty conditions (cataract→ophth, rotator-cuff→ortho, migraine→neuro) score well; conditions with many overlapping specialty hints (piriformis, tennis-elbow, T2DM) dilute precision.
+- **E&M codes (99202–99215) are never recovered.** They match only procedure vocab ("outpatient visit"), base=1, and get displaced from top-15 by every anatomy-matching row. Any condition where E&Ms are a significant fraction of gold (T2DM, migraine, HBP, ulcer) loses recall to this.
+- **Ambiguous lay terms.** `breast cancer` arm A returns mostly 19xxx surgical codes, missing mammography/chemo/radiation; it collapses to surgical interpretation. `ulcer` arm A returns 43xxx EGD codes (peptic), matches gold — but would return the same for any GI-endoscopy condition, which is a precision risk not captured by this single-gold-interpretation eval.
+
+## Why the expansion
+
+Arm A scored hcpcs_f1 ≈ 0.27 and taxonomy_f1 ≈ 0.32 on 3 conditions. With
+n=3, one stubborn condition (piriformis: gold codes whose consumer
+descriptions contain no condition-specific anatomy) dominates the mean —
+tuning becomes overfitting to one row, and arm-vs-arm differences are
+noise-bound. Curating more gold profiles is cheaper than curating signal
+out of a 3-row table. Lesson: simplify the *translator*, not the eval.
 
 ## Context
 
@@ -89,6 +122,57 @@ print predicted vs. gold side-by-side in the report for eyeballing.
 
 ---
 
+## Phase 1b: Expanded gold set (10 conditions)
+
+The 3 initial conditions clustered on two axes (MSK-procedural,
+chronic-medication). Expand to 10 spanning five axes, including two
+deliberately vague lay terms that hide specialty/treatment complexity.
+
+| # | slug | term | axis |
+|---|------|------|------|
+| 1 | piriformis-syndrome | "piriformis syndrome" | MSK, procedural, anatomically-specific |
+| 2 | tennis-elbow | "tennis elbow" | MSK, procedural, anatomically-specific |
+| 3 | carpal-tunnel-syndrome | "carpal tunnel" | MSK/neuro, procedural, cross-specialty |
+| 4 | rotator-cuff-tear | "rotator cuff tear" | MSK, surgical, specialty-narrow |
+| 5 | high-blood-pressure | "high blood pressure" | chronic, meds, E&M-heavy |
+| 6 | type-2-diabetes | "type 2 diabetes" | chronic, meds+labs, endo/IM |
+| 7 | migraine | "migraine" | neuro, mixed E&M + procedural (botox) |
+| 8 | cataract | "cataract" | surgical, specialty-narrow (ophth) |
+| 9 | **breast-cancer** | "breast cancer" | **ambiguous lay term** — spans screening (radiology), surgery (breast/gen-surg onc), medical oncology, radiation oncology, reconstruction (plastic) |
+| 10 | **ulcer** | "ulcer" | **ambiguous lay term** — peptic (GI), diabetic foot (podiatry/endo/vasc), pressure (wound care), venous leg (vasc/derm); gold encodes the most common lay meaning (peptic) with notes on the others |
+
+The two ambiguous terms are the real test: a good translator either
+resolves to the most-likely meaning, returns a broad multi-specialty
+profile, or raises an ambiguity signal. The gold profiles for these
+commit to **one canonical interpretation** and the report discusses
+what each arm does with the ambiguity.
+
+### Deliverables
+
+- Seven new `eval/gold/<slug>.json` profiles, same schema as existing,
+  each with `_comments` documenting clinical rationale and (for breast
+  cancer / ulcer) the ambiguity it hides.
+- Extend `GOLD_TERMS` in `eval/harness.py`.
+- Expand `CONDITION_SYNONYMS` in `translator_deterministic.py` to cover
+  all 10 conditions before re-running arm A.
+
+### Exit criteria
+
+All 10 gold profiles load, `--arm identity` scores 1.0 across the
+board, `--arm deterministic` runs without errors. Metrics are whatever
+they are — Phase 2b tuning comes next.
+
+---
+
+## Phase 2b: Re-tune arm A on 10-condition set
+
+Iterate `CONDITION_SYNONYMS` against the expanded eval. Record final
+numbers per-condition. Specifically note which axes the keyword-overlap
+approach handles well vs. poorly — that shapes the Phase 3 prompt
+design for arm B and the report's recommendation.
+
+---
+
 ## Phase 2: Deterministic translator (arm A)
 
 ### Reference data
@@ -142,9 +226,21 @@ CMS specialty list is queried from the existing `cms.duckdb` at runtime
 
 ### Runtime
 
-Ollama via HTTP (`http://localhost:11434/api/generate`). Default model
-`qwen2.5:3b-instruct-q4_K_M` (~2 GB, fits 8 GB RAM). Fallbacks
-documented: `llama3.2:3b`, `phi3:mini`.
+Ollama via HTTP (`http://localhost:11434/api/generate`). Cross-platform
+(Linux/Windows/Mac) — chosen over MLX because the deliverable has to be
+runnable outside Apple Silicon.
+
+### Model comparison
+
+Three Qwen2.5-instruct models, differing only in parameter count. Same
+family isolates size as the variable. Qwen2.5 was selected for strong
+constrained-JSON output behavior with `format: "json"`.
+
+| tier | model | ~RAM | host target |
+|---|---|---|---|
+| small | `qwen2.5:1.5b-instruct-q4_K_M` | ~1 GB | anywhere |
+| mid | `qwen2.5:3b-instruct-q4_K_M` | ~2 GB | 8 GB host, comfortable alongside system |
+| large | `qwen2.5:7b-instruct-q4_K_M` | ~4.5 GB | 16 GB host, comfortable alongside system |
 
 ### Translator
 
@@ -182,11 +278,26 @@ Write `eval/REPORT.md`:
 ### Testing
 
 ```bash
-brew install ollama && ollama pull qwen2.5:3b-instruct-q4_K_M
+# Install ollama (Mac: brew install ollama; Linux: see ollama.com/download)
+# then pull all three models
+ollama pull qwen2.5:1.5b-instruct-q4_K_M
+ollama pull qwen2.5:3b-instruct-q4_K_M
+ollama pull qwen2.5:7b-instruct-q4_K_M
 ollama serve &
-uv run eval/harness.py --arm deterministic
-uv run eval/harness.py --arm llm
+
+# Run each arm against the 10-condition gold set, save output
+uv run eval/harness.py --arm llm --llm-model qwen2.5:1.5b-instruct-q4_K_M > eval/results/llm-qwen25-1.5b.md
+uv run eval/harness.py --arm llm --llm-model qwen2.5:3b-instruct-q4_K_M > eval/results/llm-qwen25-3b.md
+uv run eval/harness.py --arm llm --llm-model qwen2.5:7b-instruct-q4_K_M > eval/results/llm-qwen25-7b.md
+
+# Sanity-check a single translation without the harness:
+OLLAMA_MODEL=qwen2.5:3b-instruct-q4_K_M uv run scripts/translator_llm.py "tennis elbow"
 ```
+
+The `--format json` mode constrains the Qwen tokenizer to valid JSON, so
+the single-retry-then-raise path should rarely fire. Temperature is
+pinned at 0 for reproducibility. No caching — each term makes a fresh
+Ollama call, but n=10 conditions × 3 models = 30 calls is trivial.
 
 ---
 

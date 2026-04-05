@@ -1,0 +1,58 @@
+{
+  "slug": "carpal-tunnel-syndrome",
+  "_comments": {
+    "source": "Hand-curated 2026-04-05. Median nerve entrapment at the wrist — the archetypal peripheral neuropathy. Diagnosis via NCS/EMG, treatment via splinting, steroid injection, or open/endoscopic carpal tunnel release.",
+    "hcpcs_rationale": "64721 open carpal tunnel release is the gold-standard surgical code. 29848 is endoscopic release. 20526 is in-office steroid injection. 95905/95860/95886 are the diagnostic NCS/EMG workup. 76882 is diagnostic ultrasound of the median nerve (increasingly used). 99213/99214 E&M are the clinic visits.",
+    "taxonomy_rationale": "Hand Surgery (ortho + plastic sub-cert), Orthopedic Surgery, Neurology (NCS interpretation), PM&R (EMG + non-op management), Plastic Surgery (hand), and Clinical Neurophysiology.",
+    "pubmed_rationale": "Common and clinical names, diagnostic modality (NCS, ultrasound), treatment modalities (injection, open, endoscopic)."
+  },
+  "pubmed_queries": [
+    "carpal tunnel syndrome",
+    "carpal tunnel release",
+    "median nerve entrapment",
+    "endoscopic carpal tunnel release",
+    "carpal tunnel steroid injection",
+    "nerve conduction study carpal tunnel",
+    "ultrasound diagnosis carpal tunnel",
+    "median nerve decompression",
+    "carpal tunnel surgery outcomes",
+    "carpal tunnel physical therapy",
+    "revision carpal tunnel release",
+    "carpal tunnel syndrome electrodiagnosis"
+  ],
+  "hcpcs_weights": {
+    "64721": 10,
+    "29848": 9,
+    "20526": 8,
+    "95905": 6,
+    "95886": 6,
+    "95860": 4,
+    "76882": 4,
+    "99213": 3,
+    "99214": 4,
+    "64718": 2
+  },
+  "cms_specialties": [
+    "Hand Surgery",
+    "Orthopedic Surgery",
+    "Neurology",
+    "Physical Medicine and Rehabilitation",
+    "Plastic and Reconstructive Surgery",
+    "Neurosurgery"
+  ],
+  "taxonomy_codes": [
+    "207X00000X",
+    "207XS0106X",
+    "207XS0114X",
+    "207XP3100X",
+    "208100000X",
+    "2081N0008X",
+    "2081P2900X",
+    "2084N0400X",
+    "2084N0008X",
+    "2084N0600X",
+    "208200000X",
+    "2082S0105X",
+    "207T00000X"
+  ]
+}

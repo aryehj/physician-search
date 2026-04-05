@@ -1,0 +1,56 @@
+{
+  "slug": "migraine",
+  "_comments": {
+    "source": "Hand-curated 2026-04-05. Primary headache disorder, managed on a spectrum from OTC meds to CGRP antagonists to botulinum toxin injections (chronic migraine) to occipital nerve blocks.",
+    "hcpcs_rationale": "64615 chemodenervation of head/neck muscles is the chronic-migraine Botox CPT (the PREEMPT protocol). J0585 is the onabotulinumtoxinA drug code billed alongside. 64405 occipital nerve block and 64400 face nerve (trigeminal branch) injections are in-office procedures done for migraine. 99213/99214/99215 E&M drive the majority of neurology visit volume for this condition (high-touch chronic care). Note: this is one of the few neurology-chronic conditions with a meaningful procedural signal, distinguishing it from HTN/T2DM.",
+    "taxonomy_rationale": "Neurology (including Vascular Neurology and Pain Medicine sub-certs) is the primary specialty. PM&R Pain Medicine, Anesthesiology Pain Medicine, and standalone Pain Medicine taxonomies also do headache procedures. Family Medicine and Internal Medicine manage non-refractory cases.",
+    "pubmed_rationale": "Core condition and treatment names, including newer drug classes (CGRP), procedural treatments (Botox, nerve block), and prophylaxis vs acute."
+  },
+  "pubmed_queries": [
+    "migraine",
+    "chronic migraine",
+    "migraine botulinum toxin",
+    "occipital nerve block migraine",
+    "migraine prophylaxis",
+    "CGRP migraine",
+    "episodic migraine treatment",
+    "migraine headache management",
+    "triptans migraine",
+    "migraine prevention",
+    "chronic migraine botox",
+    "migraine pathophysiology"
+  ],
+  "hcpcs_weights": {
+    "64615": 10,
+    "J0585": 9,
+    "64405": 8,
+    "64400": 5,
+    "64505": 4,
+    "99213": 7,
+    "99214": 9,
+    "99215": 6,
+    "99202": 3,
+    "99203": 5,
+    "99204": 5
+  },
+  "cms_specialties": [
+    "Neurology",
+    "Pain Management",
+    "Interventional Pain Management",
+    "Internal Medicine",
+    "Family Practice",
+    "Anesthesiology"
+  ],
+  "taxonomy_codes": [
+    "2084N0400X",
+    "2084N0402X",
+    "2084V0102X",
+    "2084P2900X",
+    "208VP0000X",
+    "208VP0014X",
+    "2081P2900X",
+    "207LP2900X",
+    "207R00000X",
+    "207Q00000X"
+  ]
+}
