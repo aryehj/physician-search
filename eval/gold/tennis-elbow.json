@@ -1,0 +1,52 @@
+{
+  "slug": "tennis-elbow",
+  "_comments": {
+    "source": "Hand-curated 2026-04-05. Clinical name: lateral epicondylitis / lateral elbow tendinopathy of extensor carpi radialis brevis origin.",
+    "hcpcs_rationale": "20551 is the classic lateral-epicondyle tendon-origin injection; 20550 (tendon sheath) also common. 24357-24359 are tenotomy codes (open, percutaneous, debridement) for refractory cases. 29837/29838 are elbow arthroscopy debridement. 76942 ultrasound guidance is very commonly billed alongside injections. 0232T captures PRP injection, a popular second-line treatment. 0101T extracorporeal shockwave therapy is another non-op option.",
+    "taxonomy_rationale": "Orthopedic Surgery (including sports and hand subspecialties) does most tennis-elbow procedures; PM&R and Sports Medicine do the non-op injection/rehab workup.",
+    "pubmed_rationale": "Mix of common and clinical names, plus treatment-modality queries (PRP, shockwave, corticosteroid, tenotomy)."
+  },
+  "pubmed_queries": [
+    "lateral epicondylitis",
+    "tennis elbow",
+    "tennis elbow injection",
+    "lateral epicondylitis corticosteroid",
+    "lateral epicondylitis platelet rich plasma",
+    "tennis elbow shockwave therapy",
+    "lateral epicondylitis surgery",
+    "lateral epicondyle tenotomy",
+    "extensor carpi radialis brevis tendinopathy",
+    "chronic lateral elbow tendinopathy",
+    "tennis elbow physical therapy",
+    "lateral epicondylitis arthroscopy"
+  ],
+  "hcpcs_weights": {
+    "20551": 10,
+    "20550": 6,
+    "24357": 5,
+    "24358": 5,
+    "24359": 5,
+    "29837": 3,
+    "29838": 3,
+    "76942": 2,
+    "0232T": 3,
+    "0101T": 2,
+    "0102T": 2
+  },
+  "cms_specialties": [
+    "Orthopedic Surgery",
+    "Sports Medicine",
+    "Physical Medicine and Rehabilitation",
+    "Hand Surgery",
+    "Interventional Radiology"
+  ],
+  "taxonomy_codes": [
+    "207X00000X",
+    "207XS0114X",
+    "207XX0004X",
+    "204C00000X",
+    "208100000X",
+    "2081S0010X",
+    "2081P2900X"
+  ]
+}

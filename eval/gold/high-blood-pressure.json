@@ -1,0 +1,61 @@
+{
+  "slug": "high-blood-pressure",
+  "_comments": {
+    "source": "Hand-curated 2026-04-05. Deliberately off-distribution: medication-managed chronic condition, not procedural. Stress-tests whether the procedure-volume-based pipeline architecture generalizes.",
+    "hcpcs_rationale": "HTN care is overwhelmingly E&M-visit-driven. 99202-99215 are new/established outpatient visits. 93784/93786/93788/93790 cover ambulatory BP monitoring (recording, scanning, analysis, review). 93000/93005/93010 ECGs are routine workup. 80053/80061/82947/83036/81003 are standard labs (CMP, lipid, glucose, HbA1c, UA) for end-organ/secondary-cause evaluation. Note: E&M codes are ubiquitous across nearly all physicians, so this set is low-specificity by design — that is the finding this condition is meant to surface.",
+    "taxonomy_rationale": "Primary care (Internal Medicine, Family Medicine, General Practice) manages most HTN. Cardiology, Nephrology, and Endocrinology handle resistant/secondary cases.",
+    "pubmed_rationale": "Management, guideline, and specific-variant queries (resistant, renovascular, secondary). ABPM is included as a workup modality."
+  },
+  "pubmed_queries": [
+    "hypertension management",
+    "essential hypertension treatment",
+    "resistant hypertension",
+    "antihypertensive therapy",
+    "ambulatory blood pressure monitoring",
+    "hypertension guidelines",
+    "hypertensive crisis treatment",
+    "blood pressure control primary care",
+    "renovascular hypertension",
+    "secondary hypertension workup",
+    "chronic kidney disease hypertension",
+    "hypertension cardiovascular outcomes"
+  ],
+  "hcpcs_weights": {
+    "99202": 2,
+    "99203": 3,
+    "99204": 3,
+    "99205": 2,
+    "99212": 2,
+    "99213": 5,
+    "99214": 8,
+    "99215": 3,
+    "93784": 10,
+    "93786": 6,
+    "93788": 6,
+    "93790": 8,
+    "93000": 4,
+    "93005": 2,
+    "93010": 2,
+    "80053": 3,
+    "80061": 3,
+    "82947": 2,
+    "83036": 3,
+    "81003": 2
+  },
+  "cms_specialties": [
+    "Internal Medicine",
+    "Family Practice",
+    "Cardiology",
+    "Nephrology",
+    "Endocrinology",
+    "General Practice"
+  ],
+  "taxonomy_codes": [
+    "207R00000X",
+    "207Q00000X",
+    "207RC0000X",
+    "207RN0300X",
+    "207RE0101X",
+    "208D00000X"
+  ]
+}

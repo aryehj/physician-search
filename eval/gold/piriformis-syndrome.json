@@ -1,0 +1,68 @@
+{
+  "slug": "piriformis-syndrome",
+  "_comments": {
+    "source": "Ported from scripts/cms_db.py (RELEVANT_CMS_SPECIALTIES, RELEVANT_TAXONOMIES, TARGET_HCPCS) and scripts/fetch_authors.py (SEARCH_QUERIES) as of 2026-04-05.",
+    "hcpcs_rationale": "27096 is the most specific code (SI joint/piriformis injection). Trigger-point and peripheral nerve blocks capture providers doing the general class of MSK injections. Nerve conduction studies (95907-95913) catch the electrodiagnostic workup. 76942/77003 are imaging guidance often billed alongside.",
+    "taxonomy_rationale": "PM&R, Neurology, Ortho, Neurosurg, Sports Med, Anesth-Pain, and Interventional Radiology cover the physician types who diagnose/treat deep-gluteal/sciatic-compression conditions.",
+    "pubmed_rationale": "11 queries casting a wide net around piriformis anatomy, symptoms (sciatica), and treatments (injection, surgery, botox)."
+  },
+  "pubmed_queries": [
+    "piriformis syndrome",
+    "piriformis muscle injection",
+    "piriformis release surgery",
+    "deep gluteal syndrome",
+    "piriformis botulinum toxin",
+    "piriformis sciatica",
+    "piriformis entrapment",
+    "sciatic nerve piriformis",
+    "piriformis MRI diagnosis",
+    "piriformis electrophysiology",
+    "extraspinal sciatica piriformis"
+  ],
+  "hcpcs_weights": {
+    "27096": 10,
+    "20552": 2,
+    "20553": 2,
+    "64450": 1,
+    "64640": 1,
+    "95907": 1,
+    "95908": 1,
+    "95909": 1,
+    "95910": 1,
+    "95911": 1,
+    "95912": 1,
+    "95913": 1,
+    "64493": 1,
+    "76942": 1,
+    "77003": 1
+  },
+  "cms_specialties": [
+    "Physical Medicine and Rehabilitation",
+    "Neurology",
+    "Orthopedic Surgery",
+    "Neurological Surgery",
+    "Sports Medicine",
+    "Interventional Radiology",
+    "Interventional Pain Management",
+    "Osteopathic Manipulative Medicine",
+    "Neuromuscular Medicine"
+  ],
+  "taxonomy_codes": [
+    "208100000X",
+    "2081P2900X",
+    "2081P0010X",
+    "2081S0010X",
+    "2084N0400X",
+    "2084N0402X",
+    "2084P0800X",
+    "2084P0805X",
+    "207X00000X",
+    "207XS0114X",
+    "207XP3100X",
+    "207T00000X",
+    "207LP2900X",
+    "204C00000X",
+    "2085R0001X",
+    "208600000X"
+  ]
+}
